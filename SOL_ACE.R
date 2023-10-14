@@ -1,6 +1,9 @@
 library(geepack)
 library(tidyverse)
 library(nlme)
+#install.packages("clubSandwich")
+install.packages('WeMix')
+library(clubSandwich)
 sol.pheno<-read.csv("pheno_final_983obs_withcells.csv")
 sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_100523.csv")
 sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
@@ -68,21 +71,26 @@ gee.ace<-function(data, exposure, outcome) {
   formula_1<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + time:", exposure))
   model.1<-gls(formula_1, 
                data = get(data),
-               corr=corSymm(form = ~ t | ID),
+               corr=corCompSymm(form = ~ t | ID),
                weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
                method = "REML",
                na.action = na.omit)
+  
+  
   print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
   
   formula_2<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + time:", exposure))
   model.2<-gls(formula_2, 
              data = get(data),
-             corr=corSymm(form = ~ t | ID),
+             corr=corCompSymm(form = ~ t | ID),
              weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
              method = "REML",
              na.action = na.omit)
   print(summary(model.2))
-  return(list(model.1,model.2))
+  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
+  return(list(robust.1,robust.2))
 }
 
 
@@ -98,6 +106,57 @@ ana.4<-gee.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA Gr
 ana.5<-gee.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
 
 ana.6<-gee.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+
+## Function for the GLM aiming for different exposure and outcome
+glm.ace<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + time:", exposure))
+  model.1<-lme(formula_1, 
+               data = get(data),
+               random = ~1+time|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  
+  formula_2<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + time:", exposure))
+  model.2<-lme(formula_2, 
+               data = get(data),
+               random = ~1+time|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.2))
+  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
+  return(list(robust.1,robust.2))
+}
+
+
+## Preliminary results
+ana.1.ml<-glm.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+
+ana.2.ml<-glm.ace("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+
+ana.3.ml<-glm.ace("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+
+ana.4.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+
+ana.5.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+
+ana.6.ml<-glm.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+
+
+#test.model<-lme(eaa_grim~ace_c2*time, data = sol.ana.long, random = ~1+time|ID, weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+             #   method = "REML", na.action = na.omit)
+#summary(test.model)
+#coef_test(test.model, vcov = "CR0", test = "z")
+
+
+
+
+
 
 
 
