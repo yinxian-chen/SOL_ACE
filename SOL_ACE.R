@@ -45,7 +45,13 @@ eaa<-c("eaa_grim_v1","eaa_grim_v2","eage_grim_v1","eage_grim_v2","age_v1","age_v
 
 sol.ana.1<-sol.phe.eaa[,c(cov_list,ace,eaa)]
 
-table(sol.ana.1$US_BORN)
+table((sol.ana.1$age_v1-sol.ana.1$age_v2>0))
+
+sol.ana.1$ID[which((sol.ana.1$age_v1-sol.ana.1$age_v2>0))] #1494646 age_v1 > age_v2
+
+sol.ana.1$age_v1[sol.ana.1$ID==1494646]<-55
+sol.ana.1$age_v2[sol.ana.1$ID==1494646]<-60
+sol.ana.1$AGE[sol.ana.1$ID==1494646]<-55
 
 sol.ana.long<-reshape(data = sol.ana.1,
                       varying = list(c("eaa_grim_v1","eaa_grim_v2"),c("eage_grim_v1","eage_grim_v2"),
@@ -65,8 +71,8 @@ sol.ana.long<-sol.ana.long%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
                                     age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
                                     BKGRD1_C7 = factor(BKGRD1_C7),
                                     ace_c4 = factor(ifelse(ACE_TOT==0,1,
-                                                    ifelse(ACE_TOT<2,2,
-                                                           ifelse(ACE_TOT<4,3,4)))))
+                                                    ifelse(ACE_TOT<4,2,3))),
+                                    age_change = age_t-AGE)
 
 ## Function for the GEE aiming for different exposure and outcome
 gee.ace<-function(data, exposure, outcome) {
@@ -99,17 +105,17 @@ gee.ace<-function(data, exposure, outcome) {
 
 ## Preliminary results
 ana.1<-gee.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-
+ana.1
 ana.2<-gee.ace("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-
+ana.2
 ana.3<-gee.ace("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-
+ana.3
 ana.4<-gee.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-
+ana.4
 ana.5<-gee.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-
+ana.5
 ana.6<-gee.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-
+ana.6
 ## Function for the GLM aiming for different exposure and outcome
 glm.ace<-function(data, exposure, outcome) {
   
@@ -139,17 +145,17 @@ glm.ace<-function(data, exposure, outcome) {
 
 ## Preliminary results
 ana.1.ml<-glm.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-
+ana.1.ml
 ana.2.ml<-glm.ace("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-
+ana.2.ml
 ana.3.ml<-glm.ace("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-
+ana.3.ml
 ana.4.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-
+ana.4.ml
 ana.5.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-
+ana.5.ml
 ana.6.ml<-glm.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-
+ana.6.ml
 
 #test.model<-lme(eaa_grim~ace_c2*time, data = sol.ana.long, random = ~1+time|ID, weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
              #   method = "REML", na.action = na.omit)
@@ -216,7 +222,7 @@ ana.5.cell
 ana.6.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
 ana.6.cell
 
-### Use 4-level ACE (0, 1-2, 3-4, 4+)
+### Use 3-level ACE (0, 1-3, 4+)
 #### GLM
 ana.1.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
 ana.1.ml.4c
@@ -237,6 +243,46 @@ ana.2.4c
 
 ana.3.4c<-gee.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
 ana.3.4c
+
+### Unbalance design
+glm.ace.ub<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + age_change:", exposure))
+  model.1<-lme(formula_1, 
+               data = get(data),
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  
+  formula_2<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + age_change:", exposure))
+  model.2<-lme(formula_2, 
+               data = get(data),
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.2))
+  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
+  return(list(robust.1,robust.2))
+}
+
+ana.1.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+ana.1.ub
+ana.2.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+ana.2.ub
+ana.2.ml
+ana.3.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+ana.3.ub
+ana.4.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+ana.4.ub
+ana.5.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+ana.5.ub
+ana.6.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+ana.6.ub
 
 
 
