@@ -63,7 +63,10 @@ sol.ana.long$t<-rep(c(1:2),nrow(sol.ana.1))
 sol.ana.long$time<-factor(sol.ana.long$time)
 sol.ana.long<-sol.ana.long%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
                                     age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
-                                    BKGRD1_C7 = factor(BKGRD1_C7))
+                                    BKGRD1_C7 = factor(BKGRD1_C7),
+                                    ace_c4 = factor(ifelse(ACE_TOT==0,1,
+                                                    ifelse(ACE_TOT<2,2,
+                                                           ifelse(ACE_TOT<4,3,4)))))
 
 ## Function for the GEE aiming for different exposure and outcome
 gee.ace<-function(data, exposure, outcome) {
@@ -153,9 +156,87 @@ ana.6.ml<-glm.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epig
 #summary(test.model)
 #coef_test(test.model, vcov = "CR0", test = "z")
 
+hist(sol.phe.eaa$ACE_TOT)
 
+summary(sol.phe.eaa$ACE_TOT)
 
+## Sensitive analysis
+### Adjust for cell type
+#### GLM
+glm.ace.cell<-function(data, exposure, outcome) {
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + time:", exposure))
+  model.cell<-lme(formula.cell, 
+               data = get(data),
+               random = ~1+time|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.cell))
+  robust.cell<-coef_test(model.cell, vcov = "CR0", test = "z")
+  return(robust.cell)
+}
 
+ana.1.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "eaa_grim")
+ana.1.ml.cell
+ana.2.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "eage_grim")
+ana.2.ml.cell
+ana.3.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "dunedin")
+ana.3.ml.cell
+ana.4.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "eaa_grim")
+ana.4.ml.cell
+ana.5.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "eage_grim")
+ana.5.ml.cell
+ana.6.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
+ana.6.ml.cell
+
+#### GEE
+gee.ace.cell<-function(data, exposure, outcome) {
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + time:", exposure))
+  model.cell<-gls(formula.cell, 
+                  data = get(data),
+                  corr = corCompSymm(form = ~ t | ID),
+                  weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)) ,
+                  method = "REML",
+                  na.action = na.omit)
+  print(summary(model.cell))
+  robust.cell<-coef_test(model.cell, vcov = "CR0", test = "z")
+  return(robust.cell)
+}
+
+ana.1.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "eaa_grim")
+ana.1.cell
+ana.2.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "eage_grim")
+ana.2.cell
+ana.3.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "dunedin")
+ana.3.cell
+ana.4.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "eaa_grim")
+ana.4.cell
+ana.5.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "eage_grim")
+ana.5.cell
+ana.6.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
+ana.6.cell
+
+### Use 4-level ACE (0, 1-2, 3-4, 4+)
+#### GLM
+ana.1.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
+ana.1.ml.4c
+
+ana.2.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
+ana.2.ml.4c
+
+ana.3.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
+ana.3.ml.4c
+
+### GEE
+ana.1.4c<-gee.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
+ana.1.4c
+ana.1
+
+ana.2.4c<-gee.ace("sol.ana.long", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
+ana.2.4c
+
+ana.3.4c<-gee.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
+ana.3.4c
 
 
 
