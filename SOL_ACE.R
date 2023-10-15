@@ -101,6 +101,100 @@ gee.ace<-function(data, exposure, outcome) {
   return(list(robust.1,robust.2))
 }
 
+#### Function of summary table
+result.summary<-function(data, exposure, covar="normal") {
+  
+  exposure<-exposure
+  covar<-covar
+  
+  if(covar=="ancenstry") {
+    gee.summary.1<-matrix(NA,nrow = 3, ncol = 4)
+    colnames(gee.summary.1)<-c("beta.1","ll.1","ul.1","P.1")
+    for(i in c(1:3)) {
+      indices<-c(2,3,17)
+      gee.summary.1[i,1]<-data$beta[indices[i]]
+      gee.summary.1[i,2]<-data$beta[indices[i]]-1.96*data$SE[indices[i]]
+      gee.summary.1[i,3]<-data$beta[indices[i]]+1.96*data$SE[indices[i]]
+      gee.summary.1[i,4]<-data$p_z[indices[i]]
+    }
+    if(exposure=="ace_c2"){
+      rownames(gee.summary.1)<-c(">=4 ACEs", "Time", ">=4 ACEs*Time")
+    }
+    else {
+      rownames(gee.summary.1)<-c("ACEs total score", "Time", "ACEs total score*Time")
+    }
+  }
+  
+  if(covar=="cell_type") {
+    gee.summary.1<-matrix(NA,nrow = 3, ncol = 4)
+    colnames(gee.summary.1)<-c("beta.1","ll.1","ul.1","P.1")
+    for(i in c(1:3)) {
+      indices<-c(2,3,18)
+      gee.summary.1[i,1]<-data$beta[indices[i]]
+      gee.summary.1[i,2]<-data$beta[indices[i]]-1.96*data$SE[indices[i]]
+      gee.summary.1[i,3]<-data$beta[indices[i]]+1.96*data$SE[indices[i]]
+      gee.summary.1[i,4]<-data$p_z[indices[i]]
+    }
+    if(exposure=="ace_c2"){
+      rownames(gee.summary.1)<-c(">=4 ACEs", "Time", ">=4 ACEs*Time")
+    }
+    else {
+      rownames(gee.summary.1)<-c("ACEs total score", "Time", "ACEs total score*Time")
+    }
+  }
+  
+  if(exposure =="ace_c4"){
+    gee.summary.1<-matrix(NA,nrow = 10, ncol = 4)
+    colnames(gee.summary.1)<-c("beta.1","ll.1","ul.1","P.1")
+    for(i in c(1:10)) {
+      indices<-c(2,3,4,10,11,2,3,4,13,14)
+      if (i<=5) {
+        gee.summary.1[i,1]<-data[[1]]$beta[indices[i]]
+        gee.summary.1[i,2]<-data[[1]]$beta[indices[i]]-1.96*data[[1]]$SE[indices[i]]
+        gee.summary.1[i,3]<-data[[1]]$beta[indices[i]]+1.96*data[[1]]$SE[indices[i]]
+        gee.summary.1[i,4]<-data[[1]]$p_z[indices[i]]
+      }
+      
+      else {
+        gee.summary.1[i,1]<-data[[2]]$beta[indices[i]]
+        gee.summary.1[i,2]<-data[[2]]$beta[indices[i]]-1.96*data[[2]]$SE[indices[i]]
+        gee.summary.1[i,3]<-data[[2]]$beta[indices[i]]+1.96*data[[2]]$SE[indices[i]]
+        gee.summary.1[i,4]<-data[[2]]$p_z[indices[i]]
+      }
+    }
+    rownames(gee.summary.1)<-rep(c("1-3 ACEs",">=4 ACEs","Time","1-3 ACEs*Time",">=4 ACEs*Time"),2)
+  }
+  
+  else {
+    gee.summary.1<-matrix(NA,nrow = 6, ncol = 4)
+    colnames(gee.summary.1)<-c("beta.1","ll.1","ul.1","P.1")
+    for (i in c(1:6)) {
+      indices<-c(2,3,9,2,3,12)
+      if (i<=3) {
+        
+        gee.summary.1[i,1]<-data[[1]]$beta[indices[i]]
+        gee.summary.1[i,2]<-data[[1]]$beta[indices[i]]-1.96*data[[1]]$SE[indices[i]]
+        gee.summary.1[i,3]<-data[[1]]$beta[indices[i]]+1.96*data[[1]]$SE[indices[i]]
+        gee.summary.1[i,4]<-data[[1]]$p_z[indices[i]]
+      }
+      
+      else {
+        gee.summary.1[i,1]<-data[[2]]$beta[indices[i]]
+        gee.summary.1[i,2]<-data[[2]]$beta[indices[i]]-1.96*data[[2]]$SE[indices[i]]
+        gee.summary.1[i,3]<-data[[2]]$beta[indices[i]]+1.96*data[[2]]$SE[indices[i]]
+        gee.summary.1[i,4]<-data[[2]]$p_z[indices[i]]
+      }
+    }
+    
+    if(exposure=="ace_c2"){
+      rownames(gee.summary.1)<-rep(c(">=4 ACEs", "Time", ">=4 ACEs*Time"),2)
+    }
+    else {
+      rownames(gee.summary.1)<-rep(c("ACEs total score", "Time", "ACEs total score*Time"),2)
+    }
+  }
+  return(gee.summary.1)
+}
 
 ## Preliminary results
 ana.1<-gee.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
@@ -115,6 +209,15 @@ ana.5<-gee.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epige
 ana.5
 ana.6<-gee.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
 ana.6
+
+
+summary.1<-result.summary(ana.1, "ace_c2", "normal")
+summary.2<-result.summary(ana.2, "ace_c2")
+summary.3<-result.summary(ana.3, "ace_c2")
+summary.4<-result.summary(ana.4, "ACE_TOT")
+summary.5<-result.summary(ana.5, "ACE_TOT")
+summary.6<-result.summary(ana.6, "ACE_TOT")
+
 ## Function for the GLM aiming for different exposure and outcome
 glm.ace<-function(data, exposure, outcome) {
   
@@ -156,6 +259,13 @@ ana.5.ml
 ana.6.ml<-glm.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
 ana.6.ml
 
+summary.1.ml<-result.summary(ana.1.ml, "ace_c2", "normal")
+summary.2.ml<-result.summary(ana.2.ml, "ace_c2")
+summary.3.ml<-result.summary(ana.3.ml, "ace_c2")
+summary.4.ml<-result.summary(ana.4.ml, "ACE_TOT")
+summary.5.ml<-result.summary(ana.5.ml, "ACE_TOT")
+summary.6.ml<-result.summary(ana.6.ml, "ACE_TOT")
+
 #test.model<-lme(eaa_grim~ace_c2*time, data = sol.ana.long, random = ~1+time|ID, weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
              #   method = "REML", na.action = na.omit)
 #summary(test.model)
@@ -193,6 +303,13 @@ ana.5.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "eage_grim")
 ana.5.ml.cell
 ana.6.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
 ana.6.ml.cell
+
+summary.1.ml.cell<-result.summary(ana.1.ml.cell, "ace_c2", "cell_type")
+summary.2.ml.cell<-result.summary(ana.2.ml.cell, "ace_c2", "cell_type")
+summary.3.ml.cell<-result.summary(ana.3.ml.cell, "ace_c2", "cell_type")
+summary.4.ml.cell<-result.summary(ana.4.ml.cell, "ACE_TOT","cell_type")
+summary.5.ml.cell<-result.summary(ana.5.ml.cell, "ACE_TOT","cell_type")
+summary.6.ml.cell<-result.summary(ana.6.ml.cell, "ACE_TOT","cell_type")
 
 #### GEE
 gee.ace.cell<-function(data, exposure, outcome) {
@@ -242,6 +359,8 @@ ana.2.4c
 
 ana.3.4c<-gee.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
 ana.3.4c
+
+summary.1.4c<-result.summary(ana.1.4c, "ace_c4")
 
 ### Unbalance design
 glm.ace.ub<-function(data, exposure, outcome) {
@@ -372,7 +491,7 @@ ana.5.ac
 ana.6.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
 ana.6.ac
 
-
+summary.1.ml.ac<-result.summary(ana.1.ac, "ace_c2", "ancenstry")
 
 
 
