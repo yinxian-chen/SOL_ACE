@@ -1,9 +1,8 @@
 library(geepack)
 library(tidyverse)
 library(nlme)
-#install.packages("clubSandwich")
-install.packages('WeMix')
 library(clubSandwich)
+
 sol.pheno<-read.csv("pheno_final_983obs_withcells.csv")
 sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_100523.csv")
 sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
@@ -283,6 +282,102 @@ ana.5.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and
 ana.5.ub
 ana.6.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
 ana.6.ub
+
+
+## Adjust for ancestry 
+#colnames(sol.ac)[3]<-"ID"
+colnames(sol.ac.pc)[1]<-"ID"
+sol.ana.ac<-merge(sol.ana.1,sol.ac.pc, by = "ID")
+
+## Long format dataset including ancestry
+sol.ana.long.ac<-reshape(data = sol.ana.ac,
+                      varying = list(c("eaa_grim_v1","eaa_grim_v2"),c("eage_grim_v1","eage_grim_v2"),
+                                     c("age_v1","age_v2"), c("dunedin_v1","dunedin_v2"),c("NK_1","NK_2"),
+                                     c("B_1","B_2"),c("MO_1","MO_2"),c("GR_1","GR_2"),
+                                     c("CD4_1","CD4_2"),c("CD8_1","CD8_2")),
+                      v.names = c("eaa_grim","eage_grim","age_t","dunedin","NK","B","MO",
+                                  "GR","CD4","CD8"),
+                      idvar = "ID",
+                      timevar = "time",
+                      times = c(0,6),
+                      direction = "long")
+sol.ana.long.ac<-sol.ana.long.ac[order(sol.ana.long.ac$ID),]
+sol.ana.long.ac$t<-rep(c(1:2),nrow(sol.ana.ac))
+sol.ana.long.ac$time<-factor(sol.ana.long.ac$time)
+sol.ana.long.ac<-sol.ana.long.ac%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
+                                    age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
+                                    BKGRD1_C7 = factor(BKGRD1_C7),
+                                    ace_c4 = factor(ifelse(ACE_TOT==0,1,
+                                                           ifelse(ACE_TOT<4,2,3))),
+                                    age_change = age_t-AGE)
+
+
+### Function for adjusting for ancestry
+####GEE
+gee.ace.ac<-function(data, exposure, outcome) {
+  
+  formula_ac<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + EV1 + EV2 + EV3 + EV4 + EV5 + time:", exposure))
+  model.ac<-gls(formula_ac, 
+               data = get(data),
+               corr=corCompSymm(form = ~ t | ID),
+               weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
+               method = "REML",
+               na.action = na.omit)
+  print(summary(model.ac))
+  robust.ac<-coef_test(model.ac, vcov = "CR0", test = "z")
+  return(robust.ac)
+}
+
+ana.1.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "eaa_grim")
+ana.1.a
+ana.2.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "eage_grim")
+ana.2.a
+ana.3.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "dunedin")
+ana.3.a
+ana.4.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "eaa_grim")
+ana.4.a
+ana.5.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "eage_grim")
+ana.5.a
+ana.6.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "dunedin")
+ana.6.a
+
+
+
+#### GLM
+glm.ace.ac<-function(data, exposure, outcome) {
+  formula.ac<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + EV1 + EV2 + EV3 + EV4 + EV5 + time:", exposure))
+  model.ac<-lme(formula.ac, 
+                  data = get(data),
+                  random = ~1+time|ID,
+                  weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+                  method = "REML",
+                  na.action = na.omit)
+  print(summary(model.ac))
+  robust.ac<-coef_test(model.ac, vcov = "CR0", test = "z")
+  return(robust.ac)
+}
+
+
+ana.1.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+ana.1.ac
+ana.2.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+ana.2.ac
+
+ana.3.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+ana.3.ac
+ana.4.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+ana.4.ac
+ana.5.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+ana.5.ac
+ana.6.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+ana.6.ac
+
+
+
+
+
+
+
 
 
 
