@@ -2,18 +2,23 @@
 title: "SOL_ACE"
 author: "Yinxian Chen"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, include=FALSE}
 library(tidyverse)
 library(nlme)
 library(clubSandwich)
+#install.packages("devtools")
+#devtools::install_github("kupietz/kableExtra")
 library(kableExtra)
+library(knitr)
 ```
 
 ```{r}
@@ -25,8 +30,53 @@ sol.v2.dun<-read.csv("HCHS_DunedinPACE_Visit2_updated_100523.csv")
 sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
 ```
 
+### Data preparation
 
-```{r}
+#### Exposure
+
+  - The primary analysis focused on binary ACEs (<4 ACEs vs. >=4 ACEs), and total ACEs score (continuous)
+  
+  - In sensitivity analysis, also focused the three-level ACEs (0, 1-3, >=4 ACEs)
+  
+#### Outcome
+
+  - Only focused on GrimAge and DunedinPACE
+  
+  - For GrimAge, two indicators were used
+  
+    - GrimAge acceleration (residuals)
+    
+    - GrimAge change 
+  
+  - Only focus on subjects with two Epigenetic age measures
+
+#### Covariates
+
+  - First set (adjusted in Model 1)
+  
+    - Baseline Age
+    
+    - Gender
+    
+    - Study center
+  
+  - Second set (further adjusted in Model 2)
+  
+    - Education attainment (less than high school vs. high school and above)
+    
+    - Age at arrival in the US (born in the US, arrived before 18y, arrived after 18y)
+    
+    - Hispanic/Latino background (note: I did not adjust it in the actual analyses since it had seven categories, which may decrease the power if it is not something we have to adjust)
+    
+  - For sensitivity analysis:
+  
+    - Cell types (NK, B, MO, GR, CD4, CD8)
+    
+    - Ancestry background (five principal components)
+    
+**Additional information**: One subject's (ID: 1494646) AGE_V1 > AGE_V2. I have flipped the subject's age to the right position.
+    
+```{r, include=F}
 ## Data preparation
 ### Only focus on the GrimAge
 sol.v1.grim<-sol.v1.eaa%>%mutate(eaa_grim_v1=AgeAccelGrim,
@@ -70,9 +120,7 @@ sol.ana.1$age_v2[sol.ana.1$ID==1494646]<-60
 sol.ana.1$AGE[sol.ana.1$ID==1494646]<-55
 ```
 
-
-
-```{r}
+```{r, include=F}
 ### Convert into the long format for longitudinal analysis
 sol.ana.long<-reshape(data = sol.ana.1,
                       varying = list(c("eaa_grim_v1","eaa_grim_v2"),c("eage_grim_v1","eage_grim_v2"),
@@ -97,7 +145,7 @@ sol.ana.long<-sol.ana.long%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
 ```
 
 ```{r, echo=F}
-result.summary<-function(data, exposure, covar="normal", model) {
+result.summary<-function(data, exposure, covar="normal") {
   
   exposure<-exposure
   covar<-covar
@@ -186,15 +234,30 @@ result.summary<-function(data, exposure, covar="normal", model) {
       }
     }
   }
-  if (model=="GEE") {
-    colnames(gee.summary.1)<-c("beta.gee","ll.gee","ul.gee","p-value.gee")
-  }
-  else {
-    colnames(gee.summary.1)<-c("beta.lm","ll.lm","ul.lm","p-value.lm")
-  }
+  
+  colnames(gee.summary.1)<-c("beta","ll","ul","p-value")
   return(gee.summary.1)
 }
 ```
+
+### Longitudinal analysis setup
+
+  - Generalized estimating equations (GEE) vs. Generalized linear mixed-effect models (GLMM)
+  
+  - Each model has been account for the sampling weight for each subject
+  
+  - Advantages to use the longitudinal analysis approach:
+  
+    - Can gain the estimates of associations in interest simultaneously:
+    
+      - Association between ACEs and the EAA at baseline
+      
+      - Association between ACEs and the rate of change in EAA from time 1 to time 2
+      
+    - More powerful than modeling two outcomes separately and can also have a consistent interpretation
+    
+  - Robust variance estimator (sandwish estimator) was used to account for the sampling weight
+
 
 ```{r}
 ## Function for the GEE aiming for different exposure and outcome
@@ -254,6 +317,18 @@ glm.ace<-function(data, exposure, outcome) {
 }
 ```
 
+### Primary analysis
+
+  - We can see the results from GEE and GLMM did not have a very good consistency
+  
+    - Directions were the same
+    
+    - However, the difference in the magnitude was not negligble
+  
+  - From my perspective, the unbalanced design in our study is the most probable attribute to this situation (discuss in the sensitivity part)
+  
+  - GLMM also seemed to have large power than GMM
+  
 
 ```{r, echo=F}
 ## Preliminary results
@@ -313,9 +388,17 @@ test<-rbind(cbind(summary.1,summary.1.ml),
             cbind(summary.3,summary.3.ml),
             cbind(summary.6,summary.6.ml))
 
-kable(test, booktabs = T, digits = 3)%>% add_header_above(c(" " = 1,"GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
+kable(test, format = "latex", booktabs = T, digits = 3, caption = "Association of Two-level ACEs and Total ACEs Score with EAA indictors")%>% add_header_above(c(" " = 1,"GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
   pack_rows(index = rep(c("Model 1" = 3, "Model 2" = 3),6))
 ```
+
+### Sensitivity analysis
+
+#### Adjusted for cell types
+
+  - Adjusted for cell types seemed increased the power
+  
+  - Probably because cell types were associated with the outcome but not the exposure
 
 ```{r}
 gee.ace.cell<-function(data, exposure, outcome) {
@@ -354,14 +437,12 @@ summary.5.cell<-result.summary(ana.5.cell, "ACE_TOT","cell_type", "GEE")
 summary.6.cell<-result.summary(ana.6.cell, "ACE_TOT","cell_type", "GEE")
 ```
 
-
-
 ```{r}
 glm.ace.cell<-function(data, exposure, outcome) {
-  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + time:", exposure))
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
   model.cell<-lme(formula.cell, 
                data = get(data),
-               random = ~1+time|ID,
+               random = ~1+age_change|ID,
                weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
                method = "REML",
                na.action = na.omit)
@@ -372,54 +453,60 @@ glm.ace.cell<-function(data, exposure, outcome) {
 ```
 
 ```{r,echo=F}
-ana.1.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "eaa_grim")
+ana.1.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "eaa_grim")
 #ana.1.ml.cell
-ana.2.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "eage_grim")
+ana.2.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "eage_grim")
 #ana.2.ml.cell
-ana.3.ml.cell<-glm.ace.cell("sol.ana.long", "ace_c2", "dunedin")
+ana.3.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "dunedin")
 #ana.3.ml.cell
-ana.4.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "eaa_grim")
+ana.4.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "eaa_grim")
 #ana.4.ml.cell
-ana.5.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "eage_grim")
+ana.5.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "eage_grim")
 #ana.5.ml.cell
-ana.6.ml.cell<-glm.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
+ana.6.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "dunedin")
 #ana.6.ml.cell
 
-summary.1.ml.cell<-result.summary(ana.1.ml.cell, "ace_c2", "cell_type", "LM")
-summary.2.ml.cell<-result.summary(ana.2.ml.cell, "ace_c2", "cell_type", "LM")
-summary.3.ml.cell<-result.summary(ana.3.ml.cell, "ace_c2", "cell_type", "LM")
-summary.4.ml.cell<-result.summary(ana.4.ml.cell, "ACE_TOT","cell_type", "LM")
-summary.5.ml.cell<-result.summary(ana.5.ml.cell, "ACE_TOT","cell_type", "LM")
-summary.6.ml.cell<-result.summary(ana.6.ml.cell, "ACE_TOT","cell_type", "LM")
+summary.1.ml.cell<-result.summary(ana.1.ml.cell, "ace_c2", "cell_type")
+summary.2.ml.cell<-result.summary(ana.2.ml.cell, "ace_c2", "cell_type")
+summary.3.ml.cell<-result.summary(ana.3.ml.cell, "ace_c2", "cell_type")
+summary.4.ml.cell<-result.summary(ana.4.ml.cell, "ACE_TOT","cell_type")
+summary.5.ml.cell<-result.summary(ana.5.ml.cell, "ACE_TOT","cell_type")
+summary.6.ml.cell<-result.summary(ana.6.ml.cell, "ACE_TOT","cell_type")
 ```
-
 
 
 ```{r, echo=F}
-test.1<-rbind(cbind(summary.1.cell,summary.1.ml.cell),
-            cbind(summary.4.cell,summary.4.ml.cell),
-            cbind(summary.2.cell,summary.2.ml.cell),
-            cbind(summary.5.cell,summary.5.ml.cell),
-            cbind(summary.3.cell,summary.3.ml.cell),
-            cbind(summary.6.cell,summary.6.ml.cell))
+test.1<-rbind(summary.1.ml.cell,
+            summary.4.ml.cell,
+            summary.2.ml.cell,
+            summary.5.ml.cell,
+            summary.3.ml.cell,
+            summary.6.ml.cell)
 
-kable(test.1, booktabs = T, digits = 3)%>% add_header_above(c(" " = 1,"GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
+kable(test.1, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Cell Types")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
   pack_rows(index = rep(c("Model 2 + cell types" = 3),6))
 ```
 
+#### Using three-level ACEs
+
+  - When changing the reference group from "<4 ACEs" to "No ACE", the association was better revealed
+  
+  - There is evidence that even small number of ACEs can associated with EAA
+  
+  - Maybe consider it the primary exposure variable?
 
 ```{r, echo=F}
 ### Use 3-level ACE (0, 1-3, 4+)
 ### GEE
 ana.1.4c<-gee.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
-ana.1.4c
-ana.1
+#ana.1.4c
+#ana.1
 
 ana.2.4c<-gee.ace("sol.ana.long", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
-ana.2.4c
+#ana.2.4c
 
 ana.3.4c<-gee.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
-ana.3.4c
+#na.3.4c
 
 summary.1.4c<-result.summary(ana.1.4c, "ace_c4", model = "GEE")
 summary.2.4c<-result.summary(ana.2.4c, "ace_c4", model = "GEE")
@@ -428,30 +515,64 @@ summary.3.4c<-result.summary(ana.3.4c, "ace_c4", model = "GEE")
 
 ```{r, echo=F}
 #### GLM
-ana.1.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
-ana.1.ml.4c
+ana.1.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "eaa_grim") # EAA GrimAge
+#ana.1.ml.4c
 
-ana.2.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
-ana.2.ml.4c
+ana.2.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
+#ana.2.ml.4c
 
-ana.3.ml.4c<-glm.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
-ana.3.ml.4c
+ana.3.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "dunedin") # Epigenetic age Pace
+#ana.3.ml.4c
 
-summary.1.4c.ml<-result.summary(ana.1.ml.4c, "ace_c4", model = "LM")
-summary.2.4c.ml<-result.summary(ana.2.ml.4c, "ace_c4", model = "LM")
-summary.3.4c.ml<-result.summary(ana.3.ml.4c, "ace_c4", model = "LM")
+summary.1.4c.ml<-result.summary(ana.1.ml.4c, "ace_c4")
+summary.2.4c.ml<-result.summary(ana.2.ml.4c, "ace_c4")
+summary.3.4c.ml<-result.summary(ana.3.ml.4c, "ace_c4")
 ```
 
 
 
 ```{r, echo=F}
-test.2<-rbind(cbind(summary.1.4c,summary.1.4c.ml),
-             cbind(summary.2.4c,summary.2.4c.ml),
-             cbind(summary.3.4c,summary.3.4c.ml))
+test.2<-rbind(summary.1.4c.ml,
+             summary.2.4c.ml,
+             summary.3.4c.ml)
 
-kable(test.2, booktabs = T, digits = 3)%>% add_header_above(c(" " = 1,"GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=10, "GrimAge"=10,"DunedinPACE"=10))%>%
+kable(test.2, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analaysis by Using Three-levels ACEs")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=10, "GrimAge"=10,"DunedinPACE"=10))%>%
   pack_rows(index = rep(c("Model 1" = 5, "Model 2" = 5),3))
 ```
+
+#### Unbalanced desgin
+
+  - We can see that not all participants were measured the second epigenetic age after 6 years from the first visit
+  
+  - Also, there are some outliers with unreasonable interval between two visit
+  
+    - First visit (2008-2011) and Second visit (2014-2017)
+    
+      - So the range of the interval should be [2014-2011, 2017-2008] = [3, 9] years
+  
+    - I removed those out of this range in the analysis but will definitely add them back if necessary
+  
+  - The GEE cannot handle the unbalanced design in the longitudinal study
+  
+    - So only GLMM was used here
+    
+  - The results were consistent to the primary analysis using GLMM but not GEE
+  
+  - Maybe think about should we recognize the nature of unbalanced desgin in our study, or consider it the balanced design with 6-year interval between two visits.
+
+```{r}
+# Consistency between baseline age and age at first epigenetic age measurement
+summary(sol.ana.1$age_v1-sol.ana.1$AGE)
+# Interval between first and second measurement
+table(sol.ana.1$age_v2-sol.ana.1$AGE)
+# Subjects that had the interval <5 or >9
+sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
+outlier_ID<-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
+
+# Exclude the outlier
+sol.ana.long.ub<-sol.ana.long%>%filter(!ID%in%outlier_ID)
+```
+
 
 ```{r}
 ### Unbalance design
@@ -482,35 +603,40 @@ glm.ace.ub<-function(data, exposure, outcome) {
 ```
 
 ```{r, echo=F}
-ana.1.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+ana.1.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
 #ana.1.ub
-ana.2.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+ana.2.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
 #ana.2.ub
-ana.3.ub<-glm.ace.ub("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+ana.3.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
 #ana.3.ub
-ana.4.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+ana.4.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
 #ana.4.ub
-ana.5.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+ana.5.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
 #ana.5.ub
-ana.6.ub<-glm.ace.ub("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#na.6.ub
+ana.6.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+#ana.6.ub
 
-summary.1.ub<-result.summary(ana.1.ub, exposure = "ace_c2", model = "LM")
-summary.2.ub<-result.summary(ana.2.ub, exposure = "ace_c2", model = "LM")
-summary.3.ub<-result.summary(ana.3.ub, exposure = "ace_c2", model = "LM")
-summary.4.ub<-result.summary(ana.4.ub, exposure = "ACE_TOT", model = "LM")
-summary.5.ub<-result.summary(ana.5.ub, exposure = "ACE_TOT", model = "LM")
-summary.6.ub<-result.summary(ana.6.ub, exposure = "ACE_TOT", model = "LM")
+summary.1.ub<-result.summary(ana.1.ub, exposure = "ace_c2")
+summary.2.ub<-result.summary(ana.2.ub, exposure = "ace_c2")
+summary.3.ub<-result.summary(ana.3.ub, exposure = "ace_c2")
+summary.4.ub<-result.summary(ana.4.ub, exposure = "ACE_TOT")
+summary.5.ub<-result.summary(ana.5.ub, exposure = "ACE_TOT")
+summary.6.ub<-result.summary(ana.6.ub, exposure = "ACE_TOT")
 ```
-
-
 
 ```{r, echo=F}
 test.3<-rbind(summary.1.ub,summary.4.ub,summary.2.ub,summary.5.ub,summary.3.ub,summary.6.ub)
 
-kable(test.3, booktabs = T, digits = 3)%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
+
+kable(test.3, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Accounting for Unbalanced Design")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
   pack_rows(index = rep(c("Model 1" = 3, "Model 2" = 3),6))
 ```
+
+#### Adjust for ancestry
+
+  - Only 774 subjects had the ancestry information
+  
+  - The results did not apparently shift after the adjustment
 
 ```{r}
 colnames(sol.ac.pc)[1]<-"ID"
@@ -538,6 +664,21 @@ sol.ana.long.ac<-sol.ana.long.ac%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
                                                            ifelse(ACE_TOT<4,2,3))),
                                     age_change = age_t-AGE)
 ```
+
+
+```{r}
+# Consistency between baseline age and age at first epigenetic age measurement
+summary(sol.ana.ac$age_v1-sol.ana.ac$AGE)
+# Interval between first and second measurement
+table(sol.ana.ac$age_v2-sol.ana.ac$AGE)
+# Subjects that had the interval <5 or >9
+sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
+outlier_ID_ac<-sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
+
+# Exclude the outlier
+sol.ana.long.ac.ub<-sol.ana.long.ac%>%filter(!ID%in%outlier_ID_ac)
+```
+
 
 
 ```{r}
@@ -629,7 +770,7 @@ test.4<-rbind(cbind(summary.1.ac,summary.1.ml.ac),
               cbind(summary.3.ac,summary.3.ml.ac),
               cbind(summary.6.ac,summary.6.ml.ac))
 
-kable(test.4, booktabs = T, digits = 3)%>% add_header_above(c(" " = 1, "GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
+kable(test.4, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Ancestry")%>% add_header_above(c(" " = 1, "GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
   pack_rows(index = rep(c( "Model 2 + ancenstry" = 3),6))
 ```
 
