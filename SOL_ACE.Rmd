@@ -258,139 +258,112 @@ result.summary<-function(data, exposure, covar="normal") {
     
   - Robust variance estimator (sandwish estimator) was used to account for the sampling weight
 
+#### Unbalanced desgin
+
+  - We can see that not all participants were measured the second epigenetic age after 6 years from the first visit
+  
+  - Also, there are some outliers with unreasonable interval between two visit
+  
+    - First visit (2008-2011) and Second visit (2014-2017)
+    
+      - So the range of the interval should be [2014-2011, 2017-2008] = [3, 9] years
+  
+    - I removed those out of this range in the analysis but will definitely add them back if necessary
+  
+  - The GEE cannot handle the unbalanced design in the longitudinal study
+  
+    - So only GLMM could be used here
 
 ```{r}
-## Function for the GEE aiming for different exposure and outcome
-gee.ace<-function(data, exposure, outcome) {
-  
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + time:", exposure))
-  model.1<-gls(formula_1, 
-               data = get(data),
-               corr=corCompSymm(form = ~ t | ID),
-               weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
-               method = "REML",
-               na.action = na.omit)
-  
-  
-  #print(summary(model.1))
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  
-  
-  formula_2<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + time:", exposure))
-  model.2<-gls(formula_2, 
-             data = get(data),
-             corr=corCompSymm(form = ~ t | ID),
-             weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
-             method = "REML",
-             na.action = na.omit)
-  #print(summary(model.2))
-  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
-  return(list(robust.1,robust.2))
-}
+# Consistency between baseline age and age at first epigenetic age measurement
+summary(sol.ana.1$age_v1-sol.ana.1$AGE)
+# Interval between first and second measurement
+table(sol.ana.1$age_v2-sol.ana.1$AGE)
+# Subjects that had the interval <5 or >9
+sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
+outlier_ID<-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
+
+# Exclude the outlier
+sol.ana.long.ub<-sol.ana.long%>%filter(!ID%in%outlier_ID)
 ```
 
-```{r}
-## Function for the GLM aiming for different exposure and outcome
-glm.ace<-function(data, exposure, outcome) {
-  
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + time:", exposure))
-  model.1<-lme(formula_1, 
-               data = get(data),
-               random = ~1+time|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.1))
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  
-  
-  formula_2<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + time:", exposure))
-  model.2<-lme(formula_2, 
-               data = get(data),
-               random = ~1+time|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.2))
-  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
-  return(list(robust.1,robust.2))
-}
-```
 
 ### Primary analysis
 
-  - We can see the results from GEE and GLMM did not have a very good consistency
+  - Two-level ACEs was associated with increased **DunedinPACE** at the first visit in in two models
   
-    - Directions were the same
+  - Total ACEs score was associated with increased **GrimAA** and **GrimAage** at the first visit in two models
+  
+  - Different reference group led to different results
+  
+    - We can see consistent results in the models using three-level ACEs with models using ACEs score
     
-    - However, the difference in the magnitude was not negligble
-  
-  - From my perspective, the unbalanced design in our study is the most probable attribute to this situation (discuss in the sensitivity part)
-  
-  - GLMM also seemed to have large power than GMM
-  
+  - What consistent is, **no association** was seen in the rate of three EAA indicators (results shown in the ACE*time)
 
-```{r, echo=F}
-## Preliminary results
-ana.1<-gee.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-#ana.1
-ana.2<-gee.ace("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-#ana.2
-ana.3<-gee.ace("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-#ana.3
-ana.4<-gee.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-#ana.4
-ana.5<-gee.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-#ana.5
-ana.6<-gee.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#ana.6
-
-
-summary.1<-result.summary(ana.1, "ace_c2", model = "GEE")
-summary.2<-result.summary(ana.2, "ace_c2", model = "GEE")
-summary.3<-result.summary(ana.3, "ace_c2", model = "GEE")
-summary.4<-result.summary(ana.4, "ACE_TOT", model = "GEE")
-summary.5<-result.summary(ana.5, "ACE_TOT", model = "GEE")
-summary.6<-result.summary(ana.6, "ACE_TOT", model = "GEE")
+```{r}
+### Unbalance design
+glm.ace.ub<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + 
+                              GENDER + CENTER + age_change:", exposure))
+  model.1<-lme(formula_1, 
+               data = get(data),
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  
+  formula_2<-as.formula(paste(outcome, "~", exposure,"+ age_change + 
+                              AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US 
+                              + age_change:", exposure))
+  model.2<-lme(formula_2, 
+               data = get(data),
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+ # print(summary(model.2))
+  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
+  return(list(robust.1,robust.2))
+}
 ```
 
-
-
 ```{r, echo=F}
-## Preliminary results
-ana.1.ml<-glm.ace("sol.ana.long", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-#ana.1.ml
-ana.2.ml<-glm.ace("sol.ana.long", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-#ana.2.ml
-ana.3.ml<-glm.ace("sol.ana.long", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-#ana.3.ml
-ana.4.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-#ana.4.ml
-ana.5.ml<-glm.ace("sol.ana.long", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-#ana.5.ml
-ana.6.ml<-glm.ace("sol.ana.long", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#ana.6.ml
+ana.1.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+#ana.1.ub
+ana.2.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+#ana.2.ub
+ana.3.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+#ana.3.ub
+ana.4.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+#ana.4.ub
+ana.5.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+#ana.5.ub
+ana.6.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+#ana.6.ub
 
-summary.1.ml<-result.summary(ana.1.ml, "ace_c2", model="LM")
-summary.2.ml<-result.summary(ana.2.ml, "ace_c2",model="LM" )
-summary.3.ml<-result.summary(ana.3.ml, "ace_c2", model="LM")
-summary.4.ml<-result.summary(ana.4.ml, "ACE_TOT", model="LM")
-summary.5.ml<-result.summary(ana.5.ml, "ACE_TOT",model="LM")
-summary.6.ml<-result.summary(ana.6.ml, "ACE_TOT",model="LM")
+summary.1.ub<-result.summary(ana.1.ub, exposure = "ace_c2")
+summary.2.ub<-result.summary(ana.2.ub, exposure = "ace_c2")
+summary.3.ub<-result.summary(ana.3.ub, exposure = "ace_c2")
+summary.4.ub<-result.summary(ana.4.ub, exposure = "ACE_TOT")
+summary.5.ub<-result.summary(ana.5.ub, exposure = "ACE_TOT")
+summary.6.ub<-result.summary(ana.6.ub, exposure = "ACE_TOT")
 ```
 
+```{r, echo=F}
+test.3<-rbind(summary.1.ub,summary.4.ub,summary.2.ub,
+              summary.5.ub,summary.3.ub,summary.6.ub)
 
-```{r, echo=FALSE}
-test<-rbind(cbind(summary.1,summary.1.ml),
-            cbind(summary.4,summary.4.ml),
-            cbind(summary.2,summary.2.ml),
-            cbind(summary.5,summary.5.ml),
-            cbind(summary.3,summary.3.ml),
-            cbind(summary.6,summary.6.ml))
 
-kable(test, format = "latex", booktabs = T, digits = 3, caption = "Association of Two-level ACEs and Total ACEs Score with EAA indictors")%>% add_header_above(c(" " = 1,"GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
+kable(test.3, format = "latex", booktabs = T, digits = 3, 
+      caption = "Sensitivity Analysis by Accounting for Unbalanced Design")%>% 
+  add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
   pack_rows(index = rep(c("Model 1" = 3, "Model 2" = 3),6))
-```
+``` 
+
 
 ### Sensitivity analysis
 
@@ -401,45 +374,11 @@ kable(test, format = "latex", booktabs = T, digits = 3, caption = "Association o
   - Probably because cell types were associated with the outcome but not the exposure
 
 ```{r}
-gee.ace.cell<-function(data, exposure, outcome) {
-  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + time:", exposure))
-  model.cell<-gls(formula.cell, 
-                  data = get(data),
-                  corr = corCompSymm(form = ~ t | ID),
-                  weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)) ,
-                  method = "REML",
-                  na.action = na.omit)
- #print(summary(model.cell))
-  robust.cell<-coef_test(model.cell, vcov = "CR0", test = "z")
-  return(robust.cell)
-}
-```
-
-```{r, echo=F}
-ana.1.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "eaa_grim")
-#ana.1.cell
-ana.2.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "eage_grim")
-#ana.2.cell
-ana.3.cell<-gee.ace.cell("sol.ana.long", "ace_c2", "dunedin")
-#ana.3.cell
-ana.4.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "eaa_grim")
-#ana.4.cell
-ana.5.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "eage_grim")
-#ana.5.cell
-ana.6.cell<-gee.ace.cell("sol.ana.long", "ACE_TOT", "dunedin")
-#ana.6.cell
-
-summary.1.cell<-result.summary(ana.1.cell, "ace_c2", "cell_type", "GEE")
-summary.2.cell<-result.summary(ana.2.cell, "ace_c2", "cell_type", "GEE")
-summary.3.cell<-result.summary(ana.3.cell, "ace_c2", "cell_type", "GEE")
-summary.4.cell<-result.summary(ana.4.cell, "ACE_TOT","cell_type", "GEE")
-summary.5.cell<-result.summary(ana.5.cell, "ACE_TOT","cell_type", "GEE")
-summary.6.cell<-result.summary(ana.6.cell, "ACE_TOT","cell_type", "GEE")
-```
-
-```{r}
 glm.ace.cell<-function(data, exposure, outcome) {
-  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + 
+                                 AGE + GENDER + CENTER + EDUCATION_C2 + 
+                                 age_arr_US + NK + B + MO + GR + CD4 + 
+                                 CD8 + age_change:", exposure))
   model.cell<-lme(formula.cell, 
                data = get(data),
                random = ~1+age_change|ID,
@@ -483,35 +422,21 @@ test.1<-rbind(summary.1.ml.cell,
             summary.3.ml.cell,
             summary.6.ml.cell)
 
-kable(test.1, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Cell Types")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
+kable(test.1, format = "latex", booktabs = T, digits = 3, 
+      caption = "Sensitivity Analysis by Adjusting for Cell Types")%>% 
+  add_header_above(c(" " = 1, "GLM" = 4))%>% 
+  pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
   pack_rows(index = rep(c("Model 2 + cell types" = 3),6))
 ```
 
 #### Using three-level ACEs
 
-  - When changing the reference group from "<4 ACEs" to "No ACE", the association was better revealed
+  - When changing the reference group from "<4 ACEs" to "No ACE", the association was better revealed in **GrimAA** and **GrimAge**, but not **DunedinPACE**
   
   - There is evidence that even small number of ACEs can associated with EAA
   
   - Maybe consider it the primary exposure variable?
 
-```{r, echo=F}
-### Use 3-level ACE (0, 1-3, 4+)
-### GEE
-ana.1.4c<-gee.ace("sol.ana.long", "ace_c4", "eaa_grim") # EAA GrimAge
-#ana.1.4c
-#ana.1
-
-ana.2.4c<-gee.ace("sol.ana.long", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
-#ana.2.4c
-
-ana.3.4c<-gee.ace("sol.ana.long", "ace_c4", "dunedin") # Epigenetic age Pace
-#na.3.4c
-
-summary.1.4c<-result.summary(ana.1.4c, "ace_c4", model = "GEE")
-summary.2.4c<-result.summary(ana.2.4c, "ace_c4", model = "GEE")
-summary.3.4c<-result.summary(ana.3.4c, "ace_c4", model = "GEE")
-```
 
 ```{r, echo=F}
 #### GLM
@@ -540,105 +465,13 @@ kable(test.2, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity
   pack_rows(index = rep(c("Model 1" = 5, "Model 2" = 5),3))
 ```
 
-#### Unbalanced desgin
-
-  - We can see that not all participants were measured the second epigenetic age after 6 years from the first visit
-  
-  - Also, there are some outliers with unreasonable interval between two visit
-  
-    - First visit (2008-2011) and Second visit (2014-2017)
-    
-      - So the range of the interval should be [2014-2011, 2017-2008] = [3, 9] years
-  
-    - I removed those out of this range in the analysis but will definitely add them back if necessary
-  
-  - The GEE cannot handle the unbalanced design in the longitudinal study
-  
-    - So only GLMM was used here
-    
-  - The results were consistent to the primary analysis using GLMM but not GEE
-  
-  - Maybe think about should we recognize the nature of unbalanced desgin in our study, or consider it the balanced design with 6-year interval between two visits.
-
-```{r}
-# Consistency between baseline age and age at first epigenetic age measurement
-summary(sol.ana.1$age_v1-sol.ana.1$AGE)
-# Interval between first and second measurement
-table(sol.ana.1$age_v2-sol.ana.1$AGE)
-# Subjects that had the interval <5 or >9
-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
-outlier_ID<-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
-
-# Exclude the outlier
-sol.ana.long.ub<-sol.ana.long%>%filter(!ID%in%outlier_ID)
-```
-
-
-```{r}
-### Unbalance design
-glm.ace.ub<-function(data, exposure, outcome) {
-  
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + age_change:", exposure))
-  model.1<-lme(formula_1, 
-               data = get(data),
-               random = ~1+age_change|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.1))
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  
-  
-  formula_2<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + age_change:", exposure))
-  model.2<-lme(formula_2, 
-               data = get(data),
-               random = ~1+age_change|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
- # print(summary(model.2))
-  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
-  return(list(robust.1,robust.2))
-}
-```
-
-```{r, echo=F}
-ana.1.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-#ana.1.ub
-ana.2.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-#ana.2.ub
-ana.3.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-#ana.3.ub
-ana.4.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-#ana.4.ub
-ana.5.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-#ana.5.ub
-ana.6.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#ana.6.ub
-
-summary.1.ub<-result.summary(ana.1.ub, exposure = "ace_c2")
-summary.2.ub<-result.summary(ana.2.ub, exposure = "ace_c2")
-summary.3.ub<-result.summary(ana.3.ub, exposure = "ace_c2")
-summary.4.ub<-result.summary(ana.4.ub, exposure = "ACE_TOT")
-summary.5.ub<-result.summary(ana.5.ub, exposure = "ACE_TOT")
-summary.6.ub<-result.summary(ana.6.ub, exposure = "ACE_TOT")
-```
-
-```{r, echo=F}
-test.3<-rbind(summary.1.ub,summary.4.ub,summary.2.ub,summary.5.ub,summary.3.ub,summary.6.ub)
-
-
-kable(test.3, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Accounting for Unbalanced Design")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
-  pack_rows(index = rep(c("Model 1" = 3, "Model 2" = 3),6))
-```
-
 #### Adjust for ancestry
 
   - Only 774 subjects had the ancestry information
   
   - The results did not apparently shift after the adjustment
 
-```{r}
+```{r, echo=F}
 colnames(sol.ac.pc)[1]<-"ID"
 sol.ana.ac<-merge(sol.ana.1,sol.ac.pc, by = "ID")
 
@@ -680,32 +513,16 @@ sol.ana.long.ac.ub<-sol.ana.long.ac%>%filter(!ID%in%outlier_ID_ac)
 ```
 
 
-
-```{r}
-### Function for adjusting for ancestry
-####GEE
-gee.ace.ac<-function(data, exposure, outcome) {
-  
-  formula_ac<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + EV1 + EV2 + EV3 + EV4 + EV5 + time:", exposure))
-  model.ac<-gls(formula_ac, 
-               data = get(data),
-               corr=corCompSymm(form = ~ t | ID),
-               weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.ac))
-  robust.ac<-coef_test(model.ac, vcov = "CR0", test = "z")
-  return(robust.ac)
-}
-```
-
 ```{r}
 #### GLM
 glm.ace.ac<-function(data, exposure, outcome) {
-  formula.ac<-as.formula(paste(outcome, "~", exposure,"+ time + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + EV1 + EV2 + EV3 + EV4 + EV5 + time:", exposure))
+  formula.ac<-as.formula(paste(outcome, "~", exposure,"+ age_change + 
+                               AGE + GENDER + CENTER + EDUCATION_C2 + 
+                               age_arr_US + EV1 + EV2 + EV3 + EV4 
+                               + EV5 + age_change:", exposure))
   model.ac<-lme(formula.ac, 
                   data = get(data),
-                  random = ~1+time|ID,
+                  random = ~1+age_change|ID,
                   weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
                   method = "REML",
                   na.action = na.omit)
@@ -715,62 +532,38 @@ glm.ace.ac<-function(data, exposure, outcome) {
 }
 ```
 
-```{r, echo=F}
-ana.1.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "eaa_grim")
-#ana.1.a
-ana.2.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "eage_grim")
-#ana.2.a
-ana.3.a<-gee.ace.ac("sol.ana.long.ac", "ace_c2", "dunedin")
-#ana.3.a
-ana.4.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "eaa_grim")
-#ana.4.a
-ana.5.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "eage_grim")
-#ana.5.a
-ana.6.a<-gee.ace.ac("sol.ana.long.ac", "ACE_TOT", "dunedin")
-#ana.6.a
-
-summary.1.ac<-result.summary(ana.1.a, "ace_c2", "ancenstry", "GEE")
-summary.2.ac<-result.summary(ana.2.a, "ace_c2", "ancenstry", "GEE")
-summary.3.ac<-result.summary(ana.3.a, "ace_c2", "ancenstry", "GEE")
-summary.4.ac<-result.summary(ana.4.a, "ACE_TOT", "ancenstry", "GEE")
-summary.5.ac<-result.summary(ana.5.a, "ACE_TOT", "ancenstry", "GEE")
-summary.6.ac<-result.summary(ana.6.a, "ACE_TOT", "ancenstry", "GEE")
-```
 
 ```{r, echo=F}
-ana.1.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
+ana.1.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
 #ana.1.ac
-ana.2.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
+ana.2.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
 #ana.2.ac
 
-ana.3.ac<-glm.ace.ac("sol.ana.long.ac", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
+ana.3.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
 #ana.3.ac
-ana.4.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
+ana.4.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
 #ana.4.ac
-ana.5.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
+ana.5.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
 #ana.5.ac
-ana.6.ac<-glm.ace.ac("sol.ana.long.ac", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
+ana.6.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
 #ana.6.ac
 
-summary.1.ml.ac<-result.summary(ana.1.ac, "ace_c2", "ancenstry", "LM")
-summary.2.ml.ac<-result.summary(ana.2.ac, "ace_c2", "ancenstry", "LM")
-summary.3.ml.ac<-result.summary(ana.3.ac, "ace_c2", "ancenstry", "LM")
-summary.4.ml.ac<-result.summary(ana.4.ac, "ACE_TOT", "ancenstry", "LM")
-summary.5.ml.ac<-result.summary(ana.5.ac, "ACE_TOT", "ancenstry", "LM")
-summary.6.ml.ac<-result.summary(ana.6.ac, "ACE_TOT", "ancenstry", "LM")
+summary.1.ml.ac<-result.summary(ana.1.ac, "ace_c2", "ancenstry")
+summary.2.ml.ac<-result.summary(ana.2.ac, "ace_c2", "ancenstry")
+summary.3.ml.ac<-result.summary(ana.3.ac, "ace_c2", "ancenstry")
+summary.4.ml.ac<-result.summary(ana.4.ac, "ACE_TOT", "ancenstry")
+summary.5.ml.ac<-result.summary(ana.5.ac, "ACE_TOT", "ancenstry")
+summary.6.ml.ac<-result.summary(ana.6.ac, "ACE_TOT", "ancenstry")
 ```
-
-
 
 ```{r, echo=F}
-test.4<-rbind(cbind(summary.1.ac,summary.1.ml.ac),
-              cbind(summary.4.ac,summary.4.ml.ac),
-              cbind(summary.2.ac,summary.2.ml.ac),
-              cbind(summary.5.ac,summary.5.ml.ac),
-              cbind(summary.3.ac,summary.3.ml.ac),
-              cbind(summary.6.ac,summary.6.ml.ac))
+test.4<-rbind(summary.1.ml.ac,
+              summary.4.ml.ac,
+              summary.2.ml.ac,
+              summary.5.ml.ac,
+              summary.3.ml.ac,
+              summary.6.ml.ac)
 
-kable(test.4, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Ancestry")%>% add_header_above(c(" " = 1, "GEE" = 4, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
+kable(test.4, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Ancestry")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
   pack_rows(index = rep(c( "Model 2 + ancenstry" = 3),6))
 ```
-
