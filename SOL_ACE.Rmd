@@ -501,7 +501,7 @@ sol.ana.long.ac<-sol.ana.long.ac%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
 summary(sol.ana.ac$age_v1-sol.ana.ac$AGE)
 # Interval between first and second measurement
 table(sol.ana.ac$age_v2-sol.ana.ac$AGE)
-# Subjects that had the interval <5 or >9
+# Subjects that had the interval <3 or >9
 sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
 outlier_ID_ac<-sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
 
