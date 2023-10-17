@@ -3,6 +3,7 @@ library(tidyverse)
 library(nlme)
 library(clubSandwich)
 library(kableExtra)
+install.packages("labelled")
 
 sol.pheno<-read.csv("pheno_final_983obs_withcells.csv")
 sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_100523.csv")
@@ -10,6 +11,9 @@ sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
 sol.v1.dun<-read.csv("HCHS_DunedinPACE_Visit1_updated_100523.csv")
 sol.v2.dun<-read.csv("HCHS_DunedinPACE_Visit2_updated_100523.csv")
 sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
+
+
+
 
 ## Data preparation
 ### Only focus on the GrimAge
@@ -48,8 +52,18 @@ sol.ana.1<-sol.phe.eaa[,c(cov_list,ace,eaa)]
 summary(sol.ana.1$age_v1-sol.ana.1$AGE)
 summary(sol.ana.1$age_v2-sol.ana.1$AGE)
 table(sol.ana.1$age_v2-sol.ana.1$AGE)
-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<5|sol.ana.1$age_v2-sol.ana.1$AGE>8))]
+sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
 
+### Weird self-reported age
+
+outlier_ID<-c(sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))],1494646)
+
+outier_EAA<-merge(sol.v1.eaa[sol.v1.eaa$ID%in%outlier_ID,],sol.v2.eaa[sol.v2.eaa$ID%in%outlier_ID,], by = "ID")
+
+outier_EAA<-outier_EAA%>%select(c(ID,age.x,EN.x,BLUP.x,age.y,EN.y,BLUP.y))
+colnames(outier_EAA)<-c("ID","AGE_V1","EN_V1","BLUP_V1","AGE_V2","EN_V2","BLUP_V2")
+
+write.csv(outier_EAA, "problematic_age_summary.csv")
 
 #table((sol.ana.1$age_v1-sol.ana.1$age_v2>0))
 
