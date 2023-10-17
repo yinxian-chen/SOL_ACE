@@ -59,6 +59,10 @@ sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
     - Gender
     
     - Study center
+    
+    - Time variable (AGE_V2-AGE_V1)
+    
+    - ACEs*Time (To indicate the additional change in rate of EAA by ACEs)
   
   - Second set (further adjusted in Model 2)
   
