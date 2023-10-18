@@ -28,6 +28,7 @@ sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
 sol.v1.dun<-read.csv("HCHS_DunedinPACE_Visit1_updated_100523.csv")
 sol.v2.dun<-read.csv("HCHS_DunedinPACE_Visit2_updated_100523.csv")
 sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
+sol.ace.items<-read.csv("ACE_items.csv")
 ```
 
 ### Data preparation
@@ -98,17 +99,24 @@ sol.v2.grim<-sol.v2.eaa%>%mutate(eaa_grim_v2=AgeAccelGrim,
 sol.v1.dun<-sol.v1.dun%>%mutate(dunedin_v1=DunedinPACE)%>%select(c(ID, dunedin_v1))
 sol.v2.dun<-sol.v2.dun%>%mutate(dunedin_v2=DunedinPACE)%>%select(c(ID, dunedin_v2))
 sol.ac.pc<-sol.ac%>%select(c(HCHS_ID,EV1,EV2,EV3,EV4,EV5))
-sol.list<-list(sol.pheno,sol.v1.grim,sol.v2.grim,sol.v1.dun,sol.v2.dun)
+
+
+### ACEs items
+
+#colnames(sol.ace.items)[1:2]<-c("ID","sub_id")
+
+ace_item<-names(sol.ace.items)[54:63]
 
 ##Merge phenotype + epigenetic age variables
+sol.list<-list(sol.pheno,sol.ace.items,sol.v1.grim,sol.v2.grim,sol.v1.dun,sol.v2.dun)
 sol.phe.eaa<-sol.list%>%reduce(inner_join,by="ID")
 
 ## Create a working dataset
-cov_list<-c("ID","AGE","GENDER","CENTER","EDUCATION_C2","US_BORN","YRSUS"
-            ,"BKGRD1_C7","NK_1","NK_2","B_1","B_2","MO_1","MO_2",
+cov_list<-c("ID","AGE","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS"
+             ,"NK_1","NK_2","B_1","B_2","MO_1","MO_2",
             "GR_1","GR_2","CD4_1","CD4_2","CD8_1","CD8_2","WEIGHT_NORM_OVERALL_EPIGEN")
 
-ace<-"ACE_TOT"
+ace<-c("ACE_TOT",ace_item)
 
 
 eaa<-c("eaa_grim_v1","eaa_grim_v2","eage_grim_v1","eage_grim_v2","age_v1","age_v2","dunedin_v1","dunedin_v2")
@@ -122,6 +130,41 @@ sol.ana.1<-sol.phe.eaa[,c(cov_list,ace,eaa)]
 sol.ana.1$age_v1[sol.ana.1$ID==1494646]<-55
 sol.ana.1$age_v2[sol.ana.1$ID==1494646]<-60
 sol.ana.1$AGE[sol.ana.1$ID==1494646]<-55
+
+table(sol.ana.1$PIEA22A)
+table(sol.ana.1$PIEA22B)
+# 7TH GRADE 3RD GRADE 4TH GRADE MD MILITARY SCHOOL GED
+table(sol.ana.1$PIEA23A)
+table(sol.ana.1$PIEA23B)
+# 4TH GRADE PHD 1ST GRADE 7TH GRADE MASTER DEGREE 3RD GRADE
+
+### Recode the parental education levels
+
+sol.ana.1<-sol.ana.1%>%mutate(fa_edu = factor(ifelse(PIEA22A!=7,PIEA22A,
+                                                     ifelse(PIEA22B=="3RD GRADE"|PIEA22B=="4TH GRADE",2,ifelse(PIEA22B=="7TH GRADE",3,
+                                                                                                               ifelse(PIEA22B=="MD"|PIEA22B=="MILITARY SCHOOL",6,
+                                                                                                                      ifelse(PIEA22B=="GED",4,NA)))))))
+
+sol.ana.1<-sol.ana.1%>%mutate(ma_edu = factor(ifelse(PIEA23A!=7,PIEA23A,
+                                                     ifelse(PIEA23B=="1ST GRADE"|PIEA23B=="3RD GRADE"|PIEA23B=="4TH GRADE",2,ifelse(PIEA23B=="7TH GRADE",3,
+                                                                                                               ifelse(PIEA23B=="PHD"|PIEA23B=="MASTER DEGREE",6,NA))))))
+
+table(sol.ana.1$ma_edu)
+table(sol.ana.1$fa_edu)
+table(is.na(sol.ana.1$ma_edu))
+table(is.na(sol.ana.1$fa_edu))
+
+#sol.ana.1<-sol.ana.1%>%select(-c(PIEA22B,PIEA23B,PIEA22A,PIEA23A))
+sol.ana.1<-sol.ana.1%>%select(-c(PIEA22A,PIEA23A))
+
+missing_rate<-do.call("cbind",lapply(sol.ana.1, function(x)
+  rbind(sum(is.na(x)),100*sum(is.na(x)/dim(sol.ana.1)[1]))))
+colnames(missing_rate)<-names(sol.ana.1)
+round(missing_rate, 2)
+
+missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
+
+
 ```
 
 ```{r, include=F}
@@ -142,10 +185,11 @@ sol.ana.long$t<-rep(c(1:2),nrow(sol.ana.1))
 sol.ana.long$time<-factor(sol.ana.long$time)
 sol.ana.long<-sol.ana.long%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
                                     age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
-                                    BKGRD1_C7 = factor(BKGRD1_C7),
                                     ace_c4 = factor(ifelse(ACE_TOT==0,1,
                                                     ifelse(ACE_TOT<4,2,3))),
-                                    age_change = age_t-AGE)
+                                    age_change = age_t-AGE,
+                                    ACE_TOT_ND = ACE_TOT-STEA16,
+                                    )
 ```
 
 ```{r, echo=F}
