@@ -103,6 +103,9 @@ sol.v2.dun<-sol.v2.dun%>%mutate(dunedin_v2=DunedinPACE)%>%select(c(ID, dunedin_v
 sol.ac.pc<-sol.ac%>%select(c(HCHS_ID,EV1,EV2,EV3,EV4,EV5))
 
 
+sol.pheno<-sol.pheno%>%mutate(AGE_correct=ifelse(AGE_correct-AGE< -1|AGE_correct-AGE> 1,AGE_correct, AGE))
+sol.pheno$AGE_V1_correct<-sol.pheno$AGE_correct
+
 ### ACEs items
 
 #colnames(sol.ace.items)[1:2]<-c("ID","sub_id")
@@ -371,6 +374,8 @@ lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
 RE <- 0.95
 lambda/(RE^(-1)-1) #5
 
+set.seed(981119)
+
 imp_5<-mice(sol.ana.long.1, m=5, maxit = 10, predictorMatrix = predma, method = predmethod, print = F)
 
 plot(imp_5)
@@ -378,7 +383,23 @@ plot(imp_5)
 imp_list<-datlist_create(imp_5)
 
 ```
-
+```{r}
+### Unbalance design
+glm.ace.ub<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+```
 
 ### Primary analysis
 
@@ -393,34 +414,164 @@ imp_list<-datlist_create(imp_5)
     - We can see consistent results in the models using three-level ACEs with models using ACEs score
     
   - What consistent is, **no association** was seen in the rate of three EAA indicators (results shown in the ACE*time)
+  
+```{r}
+imp_list_new<-lapply(imp_list, function(data) {
+  data$ACE_TOT<-rowSums(data[,names(data)%in%ace.2], na.rm = T)
+  data$ACE_TOT_ND<-rowSums(data[,names(data)%in%ace.2[-6]], na.rm = T)
+  data<-data%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
+                      ace_c3 = factor(ifelse(ACE_TOT==0,1,
+                                      ifelse(ACE_TOT<4,2,3))),
+                      ace_c2_ND = ifelse(ACE_TOT_ND<4,0,1),
+                      ace_c3_ND = factor(ifelse(ACE_TOT_ND==0,1,
+                                      ifelse(ACE_TOT<4,2,3))))
+  #res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
+  return(data)
+}
+  )
+
+```
+  
+```{r}
+pa.1<-lapply(imp_list_new, function(data){
+  res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
+  return(res.1)
+})
+
+qhat<-lapply(pa.1, function(re){
+  beta<-re$beta[c(2:3,10)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa.1, function(re){
+  se<-re$SE[c(2:3,10)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.1 <- pool_mi( qhat=qhat, se=se )
+
+summary(pool.1)
+```
+  
+  
+```{r}
+pa.2<-lapply(imp_list_new, function(data){
+  res.2<-glm.ace.ub(data,"ace_c2","eage_grim")
+  return(res.2)
+})
+
+qhat<-lapply(pa.2, function(re){
+  beta<-re$beta[c(2:3,10)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa.2, function(re){
+  se<-re$SE[c(2:3,10)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.2 <- pool_mi( qhat=qhat, se=se )
+
+summary(pool.2)
+```
+  
+  
+```{r}
+pa.3<-lapply(imp_list_new, function(data){
+  res.3<-glm.ace.ub(data,"ace_c2","dunedin")
+  return(res.3)
+})
+
+qhat<-lapply(pa.3, function(re){
+  beta<-re$beta[c(2:3,10)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa.3, function(re){
+  se<-re$SE[c(2:3,10)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.3 <- pool_mi( qhat=qhat, se=se )
+
+summary(pool.3)
+```
+  
+```{r}
+outcome_list<-c("eaa_grim","eage_grim","dunedin")
+result.matrix<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.ub(data,"ace_c2", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,10)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,10)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix)<-c("beta","p-value","lower","upper","outcome")
+
+```
+
 
 ```{r}
-### Unbalance design
-glm.ace.ub<-function(data, exposure, outcome) {
-  
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + age_change:", exposure))
-  model.1<-lme(formula_1, 
-               data = get(data),
-               random = ~1+age_change|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.1))
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  
-  
-  formula_2<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + BKGRD1_C7 + age_change:", exposure))
-  model.2<-lme(formula_2, 
-               data = get(data),
-               random = ~1+age_change|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
- # print(summary(model.2))
-  robust.2<-coef_test(model.2, vcov = "CR0", test = "z")
-  return(list(robust.1,robust.2))
+result.matrix.1<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.1[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.ub(data,"ACE_TOT", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,10)]
+  names(beta)<-c("ACEs score","Time", "ACEs score:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,10)]
+  names(se)<-c("ACEs score","Time", "ACEs score:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.1[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix.1[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix.1[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.1[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
 }
+colnames(result.matrix.1)<-c("beta","p-value","lower","upper","outcome")
 ```
+
 
 ```{r, echo=F}
 ana.1.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
@@ -465,9 +616,9 @@ kable(test.3, format = "latex", booktabs = T, digits = 3,
 
 ```{r}
 glm.ace.cell<-function(data, exposure, outcome) {
-  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + CENTER + EDUCATION_C2 + age_arr_US + BKGRD1_C7 + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
   model.cell<-lme(formula.cell, 
-               data = get(data),
+               data = data,
                random = ~1+age_change|ID,
                weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
                method = "REML",
@@ -478,26 +629,161 @@ glm.ace.cell<-function(data, exposure, outcome) {
 }
 ```
 
-```{r,echo=F}
-ana.1.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "eaa_grim")
-#ana.1.ml.cell
-ana.2.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "eage_grim")
-#ana.2.ml.cell
-ana.3.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ace_c2", "dunedin")
-#ana.3.ml.cell
-ana.4.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "eaa_grim")
-#ana.4.ml.cell
-ana.5.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "eage_grim")
-#ana.5.ml.cell
-ana.6.ml.cell<-glm.ace.cell("sol.ana.long.ub", "ACE_TOT", "dunedin")
-#ana.6.ml.cell
 
-summary.1.ml.cell<-result.summary(ana.1.ml.cell, "ace_c2", "cell_type")
-summary.2.ml.cell<-result.summary(ana.2.ml.cell, "ace_c2", "cell_type")
-summary.3.ml.cell<-result.summary(ana.3.ml.cell, "ace_c2", "cell_type")
-summary.4.ml.cell<-result.summary(ana.4.ml.cell, "ACE_TOT","cell_type")
-summary.5.ml.cell<-result.summary(ana.5.ml.cell, "ACE_TOT","cell_type")
-summary.6.ml.cell<-result.summary(ana.6.ml.cell, "ACE_TOT","cell_type")
+```{r}
+result.matrix.3<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.3[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.cell(data,"ace_c2", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,16)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,16)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.3[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix.3[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix.3[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.3[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix.3)<-c("beta","p-value","lower","upper","outcome")
+
+```
+```{r}
+result.matrix.4<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.4[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.cell(data,"ACE_TOT", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,16)]
+  names(beta)<-c("ACEs score","Time", "ACEs score:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,16)]
+  names(se)<-c("ACEs score","Time", "ACEs score:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.4[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix.4[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix.4[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.4[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix.4)<-c("beta","p-value","lower","upper","outcome")
+
+```
+
+#### Parental separate as the covariate
+
+```{r}
+### Parental separate as the covariate
+glm.ace.nd<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + STEA16 + age_change:", exposure))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+```
+
+
+```{r}
+result.matrix.5<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.5[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.nd(data,"ace_c2_ND", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,11)]
+  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,11)]
+  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.5[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix.5[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix.5[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.5[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix.5)<-c("beta","p-value","lower","upper","outcome")
+
+```
+
+```{r}
+result.matrix.6<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.6[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.nd(data,"ACE_TOT_ND", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:3,11)]
+  names(beta)<-c("ACEs score","Time", "ACEs score:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:3,11)]
+  names(se)<-c("ACEs score","Time", "ACEs score:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.6[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+result.matrix.6[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+result.matrix.6[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.6[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix.6)<-c("beta","p-value","lower","upper","outcome")
+
 ```
 
 
@@ -526,6 +812,38 @@ kable(test.1, format = "latex", booktabs = T, digits = 3,
   
   - Maybe consider it the primary exposure variable?
 
+```{r}
+result.matrix.2<-matrix(NA, nrow = 15, ncol = 5)
+result.matrix.2[,5]<-c(rep("eaa_grim",5),rep("eage_grim",5),rep("dunedin",5))
+
+for (i in 1:3) {
+  pa<-lapply(imp_list_new, function(data){
+  res<-glm.ace.ub(data,"ace_c3", outcome_list[i])
+  return(res)
+})
+
+qhat<-lapply(pa, function(re){
+  beta<-re$beta[c(2:4,11:12)]
+  names(beta)<-c("1-3 ACEs",">=4 ACEs","Time", "1-3 ACEs:Time", ">=4 ACEs:Time")
+  return(beta)
+})
+
+se<-lapply(pa, function(re){
+  se<-re$SE[c(2:4,11:12)]
+  names(se)<-c("1-3 ACEs",">=4 ACEs","Time", "1-3 ACEs:Time", ">=4 ACEs:Time")
+  return(se)
+})
+
+pool.re <- pool_mi( qhat=qhat, se=se )
+
+result.matrix.2[(5*i-4):(5*i),1]<-summary(pool.re)[["results"]]
+result.matrix.2[(5*i-4):(5*i),2]<-summary(pool.re)[["p"]]
+result.matrix.2[(5*i-4):(5*i),3]<-summary(pool.re)[["(lower"]]
+result.matrix.2[(5*i-4):(5*i),4]<-summary(pool.re)[["upper)"]]
+
+}
+colnames(result.matrix.2)<-c("beta","p-value","lower","upper","outcome")
+```
 
 ```{r, echo=F}
 #### GLM
@@ -542,8 +860,6 @@ summary.1.4c.ml<-result.summary(ana.1.ml.4c, "ace_c4")
 summary.2.4c.ml<-result.summary(ana.2.ml.4c, "ace_c4")
 summary.3.4c.ml<-result.summary(ana.3.ml.4c, "ace_c4")
 ```
-
-
 
 ```{r, echo=F}
 test.2<-rbind(summary.1.4c.ml,
