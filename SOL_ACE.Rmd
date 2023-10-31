@@ -21,6 +21,8 @@ library(kableExtra)
 library(knitr)
 library(mice)
 library(miceadds)
+library(readxl)
+library(ggplot2)
 ```
 
 ```{r}
@@ -31,6 +33,7 @@ sol.v1.dun<-read.csv("HCHS_DunedinPACE_Visit1_updated_100523.csv")
 sol.v2.dun<-read.csv("HCHS_DunedinPACE_Visit2_updated_100523.csv")
 sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
 sol.ace.items<-read.csv("ACE_items.csv")
+correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
 ```
 
 ### Data preparation
@@ -103,9 +106,26 @@ sol.v2.dun<-sol.v2.dun%>%mutate(dunedin_v2=DunedinPACE)%>%select(c(ID, dunedin_v
 sol.ac.pc<-sol.ac%>%select(c(HCHS_ID,EV1,EV2,EV3,EV4,EV5))
 
 
-sol.pheno<-sol.pheno%>%mutate(AGE_correct=ifelse(AGE_correct-AGE< -1|AGE_correct-AGE> 1,AGE_correct, AGE))
-sol.pheno$AGE_V1_correct<-sol.pheno$AGE_correct
+#sol.pheno<-sol.pheno%>%mutate(AGE_correct=ifelse(AGE_correct-AGE< -1|AGE_correct-AGE> 1,AGE_correct, AGE))
+#sol.pheno$AGE_V1_correct<-sol.pheno$AGE_correct
 
+
+#### check age
+
+check_age<-merge(correct_age, sol.pheno[,c("ID","AGE_correct")], by = "ID")
+check_age<-check_age%>%mutate(age_diff = AGE_CORRECTED-AGE_correct)
+table(check_age$age_diff)
+
+sol.pheno<-merge(correct_age, sol.pheno, by="ID", all.y = T)
+
+sol.pheno<-sol.pheno%>%mutate(AGE_correct = ifelse(is.na(AGE_CORRECTED),AGE_correct,AGE_CORRECTED))
+sol.pheno<-sol.pheno%>%mutate(AGE = AGE_correct)%>%select(-c(AGE_correct,AGE_V1_correct))
+
+sol.pheno[!is.na(sol.pheno$AGE_CORRECTED),c("ID","AGE","AGE_CORRECTED")]
+
+sol.pheno$ID<-as.numeric(sol.pheno$ID)
+
+#write.csv(sol.pheno,"/Volumes/rsphprojects-ts/ssuglia/SOL/data/Sarina_Epigen/02_phenodata/pheno_final_983obs_withcells.csv")
 ### ACEs items
 
 #colnames(sol.ace.items)[1:2]<-c("ID","sub_id")
@@ -124,7 +144,7 @@ sol.phe.eaa<-sol.phe.eaa%>%mutate_at(vars(STEA11:STEA20), as.numeric)
 #sol.phe.eaa$ACE_TOT_ND<-rowSums(sol.phe.eaa[,c(403:407,409:412)],na.rm = T)
 
 ## Create a working dataset
-cov_list<-c("ID","AGE_correct","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS","EDUCATION_C2","INCOME_C3","BKGRD1_C7","NK_1","NK_2","B_1","B_2","MO_1","MO_2",
+cov_list<-c("ID","AGE","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS","EDUCATION_C2","INCOME_C3","BKGRD1_C7","NK_1","NK_2","B_1","B_2","MO_1","MO_2",
             "GR_1","GR_2","CD4_1","CD4_2","CD8_1","CD8_2","WEIGHT_NORM_OVERALL_EPIGEN")
 
 #cov_list_short<-c("ID","AGE","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS")
@@ -166,7 +186,7 @@ sol.ana.1<-sol.ana.1%>%select(-c(PIEA22B,PIEA23B,PIEA22A,PIEA23A))%>%mutate(ma_e
                                     fa_edu_3c = factor(ifelse(fa_edu<3,1,
                                                        ifelse(fa_edu==3,2,3))))%>%select(-c(ma_edu,fa_edu))
 
-sol.ana.1$age_v1<-sol.ana.1$AGE_correct
+sol.ana.1$age_v1<-sol.ana.1$AGE
 #sol.ana.1<-sol.ana.1%>%select(-c(PIEA22A,PIEA23A))
 
 
@@ -182,6 +202,11 @@ missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
 
 #summary(sol.ana.1$ACE_TOT_ND)
 ```
+
+
+
+
+
 
 ```{r, include=F}
 ### Convert into the long format for longitudinal analysis
@@ -200,7 +225,7 @@ sol.ana.long<-sol.ana.long[order(sol.ana.long$ID),]
 #sol.ana.long$t<-rep(c(1:2),nrow(sol.ana.1))
 #sol.ana.long$time<-factor(sol.ana.long$time)
 sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
-                                    age_change = age_t-AGE_correct,
+                                    age_change = age_t-AGE,
                                     GENDER = factor(ifelse(GENDER=="M",0,1)))%>%select(-c(age_t,time))
 
 ```
@@ -370,9 +395,9 @@ predmethod<-imp_1$method
 #predmethod
 #summary(complete(imp_1))
 
-lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
-RE <- 0.95
-lambda/(RE^(-1)-1) #5
+#lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
+#RE <- 0.95
+#lambda/(RE^(-1)-1) #5
 
 set.seed(981119)
 
@@ -387,7 +412,7 @@ imp_list<-datlist_create(imp_5)
 ### Unbalance design
 glm.ace.ub<-function(data, exposure, outcome) {
   
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
   model.1<-lme(formula_1, 
                data = data,
                random = ~1+age_change|ID,
@@ -507,7 +532,6 @@ summary(pool.3)
 outcome_list<-c("eaa_grim","eage_grim","dunedin")
 result.matrix<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
-
 for (i in 1:3) {
   pa<-lapply(imp_list_new, function(data){
   res<-glm.ace.ub(data,"ace_c2", outcome_list[i])
@@ -535,6 +559,8 @@ result.matrix[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix)<-c("beta","p-value","lower","upper","outcome")
+
+result.matrix<-as.data.frame(result.matrix)%>%mutate_at(vars(beta:upper), as.numeric)
 
 ```
 
@@ -570,6 +596,50 @@ result.matrix.1[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.1)<-c("beta","p-value","lower","upper","outcome")
+result.matrix.1<-as.data.frame(result.matrix.1)%>%mutate_at(vars(beta:upper), as.numeric)
+```
+
+
+```{r}
+result.matrix$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
+
+
+ana.plot<- ggplot(data=result.matrix,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_pointrange(aes(col=variable))+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.1,cex=0.75) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot
+```
+
+```{r}
+result.matrix.1$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.1$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
+
+
+ana.plot.1<- ggplot(data=result.matrix.1,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_pointrange(aes(col=variable))+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.1,cex=0.75) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.1
 ```
 
 
@@ -616,7 +686,7 @@ kable(test.3, format = "latex", booktabs = T, digits = 3,
 
 ```{r}
 glm.ace.cell<-function(data, exposure, outcome) {
-  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
+  formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
   model.cell<-lme(formula.cell, 
                data = data,
                random = ~1+age_change|ID,
@@ -661,7 +731,7 @@ result.matrix.3[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.3)<-c("beta","p-value","lower","upper","outcome")
-
+result.matrix.3<-as.data.frame(result.matrix.3)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 ```{r}
 result.matrix.4<-matrix(NA, nrow = 9, ncol = 5)
@@ -694,8 +764,80 @@ result.matrix.4[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.4)<-c("beta","p-value","lower","upper","outcome")
-
+result.matrix.4<-as.data.frame(result.matrix.4)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
+
+```{r}
+result.matrix.3$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.3$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
+
+
+ana.plot.3<- ggplot(data=result.matrix.3,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_pointrange(aes(col=variable))+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up Adjusting for Cell Types", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.1,cex=0.75) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.3
+```
+
+```{r}
+result.matrix.cell<-rbind(result.matrix,result.matrix.3)
+result.matrix.cell$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Cell types"))
+result.matrix.cell$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.cell<- ggplot(data=result.matrix.cell,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape=model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.cell
+```
+
+```{r}
+result.matrix.4$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.4$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+result.matrix.cell.1<-rbind(result.matrix.1,result.matrix.4)
+result.matrix.cell.1$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Cell types"))
+result.matrix.cell.1$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.cell.1<- ggplot(data=result.matrix.cell.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape=model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.cell.1
+```
+
+
+
 
 #### Parental separate as the covariate
 
@@ -703,7 +845,7 @@ colnames(result.matrix.4)<-c("beta","p-value","lower","upper","outcome")
 ### Parental separate as the covariate
 glm.ace.nd<-function(data, exposure, outcome) {
   
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + STEA16 + age_change:", exposure))
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + STEA16 + age_change:", exposure))
   model.1<-lme(formula_1, 
                data = data,
                random = ~1+age_change|ID,
@@ -749,7 +891,7 @@ result.matrix.5[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.5)<-c("beta","p-value","lower","upper","outcome")
-
+result.matrix.5<-as.data.frame(result.matrix.5)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
 ```{r}
@@ -783,8 +925,60 @@ result.matrix.6[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.6)<-c("beta","p-value","lower","upper","outcome")
-
+result.matrix.6<-as.data.frame(result.matrix.6)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
+```{r}
+result.matrix.5$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.5$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.nd<-rbind(result.matrix,result.matrix.5)
+result.matrix.nd$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Parental separation as an ACE", "Parental separation as a covariate"))
+result.matrix.nd$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.nd<- ggplot(data=result.matrix.nd,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.nd
+```
+
+```{r}
+result.matrix.6$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.6$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.nd.1<-rbind(result.matrix.1,result.matrix.6)
+result.matrix.nd.1$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Parental separation as an ACE", "Parental separation as a covariate"))
+result.matrix.nd.1$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.nd.1<- ggplot(data=result.matrix.nd.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.nd.1
+```
+
 
 
 ```{r, echo=F}
@@ -843,6 +1037,7 @@ result.matrix.2[(5*i-4):(5*i),4]<-summary(pool.re)[["upper)"]]
 
 }
 colnames(result.matrix.2)<-c("beta","p-value","lower","upper","outcome")
+result.matrix.2<-as.data.frame(result.matrix.2)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
 ```{r, echo=F}
@@ -910,6 +1105,7 @@ ace_specific<-lapply(ace.2, function(x){
 
   }
   colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
   return(result.matrix.x)
 })
 ```
@@ -951,7 +1147,7 @@ sol.ana.long.ac.ub<-sol.ana.long.ac%>%filter(!ID%in%outlier_ID_ac)
 ```{r}
 #### GLM
 glm.ace.ac<-function(data, exposure, outcome) {
-  formula.ac<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE_correct + GENDER + fa_edu_3c + ma_edu_3c + EV1 + EV2 + EV3 + EV4 + EV5 + age_change:", exposure))
+  formula.ac<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + EV1 + EV2 + EV3 + EV4 + EV5 + age_change:", exposure))
   model.ac<-lme(formula.ac, 
                   data = data,
                   random = ~1+age_change|ID,
@@ -999,6 +1195,7 @@ ace_ancestry<-lapply(ace_list, function(x){
 
   }
   colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
   return(result.matrix.x)
 })
 
@@ -1009,7 +1206,7 @@ ace_ancestry<-lapply(ace_list, function(x){
   - Evidence that not dealing with missing value may lead to overestimated results.
 
 ```{r}
-sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE_correct")]),]
+sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE")]),]
 sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ace_c2=ifelse(ACE_TOT<4,0,1))
 
 cca.list<-lapply(ace_list,function(x) {
@@ -1024,6 +1221,7 @@ cca.list<-lapply(ace_list,function(x) {
      result.matrix.x[(3*i-2):(3*i),4]<-res$beta + 1.96*res$SE
    }
    colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+   result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
    return(result.matrix.x)
 })
 
