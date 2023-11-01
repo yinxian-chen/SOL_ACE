@@ -1260,6 +1260,10 @@ ana.plot.anc.1
 ```{r}
 sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE")]),]
 sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ace_c2=ifelse(ACE_TOT<4,0,1))
+sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ma_ace_c2 = ace_c2*I(GENDER==0),
+                                            fe_ace_c2 = ace_c2*I(GENDER==1),
+                                            ma_ACE_TOT = ACE_TOT*I(GENDER==0),
+                                            fe_ACE_TOT = ACE_TOT*I(GENDER==1))
 
 cca.list<-lapply(ace_list,function(x) {
    result.matrix.x<-matrix(NA, nrow = 9, ncol = 5)
@@ -1277,6 +1281,25 @@ cca.list<-lapply(ace_list,function(x) {
    return(result.matrix.x)
 })
 
+test.res<-lme(eaa_grim~ma_ace_c2+fe_ace_c2+age_change+ma_ace_c2:age_change+fe_ace_c2:age_change+GENDER+ AGE,
+              data = sol.ana.long.cca,
+              random = ~1+age_change|ID,
+              weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+              method = "REML",
+              na.action = na.omit)
+
+summary(test.res)
+
+test.res.1<-lme(eaa_grim~ma_ACE_TOT+fe_ACE_TOT+age_change+ma_ACE_TOT:age_change+fe_ACE_TOT:age_change+GENDER,
+              data = sol.ana.long.cca,
+              random = ~1+age_change|ID,
+              weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+              method = "REML",
+              na.action = na.omit)
+
+summary(test.res.1)
+
+test.res
 ```
 
 ```{r}
@@ -1330,39 +1353,189 @@ ana.plot.cca.1<- ggplot(data=result.matrix.cca.1,
 
 ana.plot.cca.1
 ```
+### Potential effect modification
 
+#### Stratified analysis by sex
 
-```{r, echo=F}
-ana.1.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-#ana.1.ac
-ana.2.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-#ana.2.ac
-
-ana.3.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-#ana.3.ac
-ana.4.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-#ana.4.ac
-ana.5.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-#ana.5.ac
-ana.6.ac<-glm.ace.ac("sol.ana.long.ac.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#ana.6.ac
-
-summary.1.ml.ac<-result.summary(ana.1.ac, "ace_c2", "ancenstry")
-summary.2.ml.ac<-result.summary(ana.2.ac, "ace_c2", "ancenstry")
-summary.3.ml.ac<-result.summary(ana.3.ac, "ace_c2", "ancenstry")
-summary.4.ml.ac<-result.summary(ana.4.ac, "ACE_TOT", "ancenstry")
-summary.5.ml.ac<-result.summary(ana.5.ac, "ACE_TOT", "ancenstry")
-summary.6.ml.ac<-result.summary(ana.6.ac, "ACE_TOT", "ancenstry")
+```{r}
+imp_list_gender<-lapply(imp_list_new, function(data) {
+  data<-data%>%mutate(ma_ace_c2 = ace_c2*I(GENDER==0),
+                      fe_ace_c2 = ace_c2*I(GENDER==1),
+                      ma_ACE_TOT = ACE_TOT*I(GENDER==0),
+                      fe_ACE_TOT = ACE_TOT*I(GENDER==1))
+  return(data)
+})
 ```
 
-```{r, echo=F}
-test.4<-rbind(summary.1.ml.ac,
-              summary.4.ml.ac,
-              summary.2.ml.ac,
-              summary.5.ml.ac,
-              summary.3.ml.ac,
-              summary.6.ml.ac)
+```{r}
+glm.ace.sex<-function(data, exposure.1, exposure.2, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure.1, "+", exposure.2, "+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure.1, "+ age_change:", exposure.2))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
 
-kable(test.4, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analysis by Adjusting for Ancestry")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
-  pack_rows(index = rep(c( "Model 2 + ancenstry" = 3),6))
+glm.ace.int<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure, "+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + GENDER:", exposure, "+ age_change:", exposure, "+ age_change:GENDER:", exposure))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
 ```
+
+
+```{r}
+ace_indicator<-c("ma_ace_c2","fe_ace_c2","ma_ACE_TOT","fe_ACE_TOT")
+ace_position<-c(1,2)
+
+ace_gender<-lapply(ace_position, function(x){
+  result.matrix.x<-matrix(NA, nrow = 15, ncol = 5)
+  for (i in 1:3) {
+    pa<-lapply(imp_list_gender, function(data){
+    res<-glm.ace.sex(data,ace_indicator[2*x-1], ace_indicator[2*x], outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(2:4,11:12)]
+    names(beta)<-c("ACE (male)","ACE (female)","Time", "ACE:Time (male)","ACE:Time (female)")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(2:4,11:12)]
+    names(se)<-c("ACE (male)","ACE (female)","Time", "ACE:Time (male)","ACE:Time (female)")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(5*i-4):(5*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(5*i-4):(5*i),2]<-summary(pool.re)[["p"]]
+  result.matrix.x[(5*i-4):(5*i),3]<-summary(pool.re)[["(lower"]]
+  result.matrix.x[(5*i-4):(5*i),4]<-summary(pool.re)[["upper)"]]
+
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
+  result.matrix.x[,5]<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+```{r}
+ace_gender[[1]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.gender<-ace_gender[[1]]%>%filter(variable!="Time")
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+result.matrix.gender$gender<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Male", "Female"))
+result.matrix.gender$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.gender<- ggplot(data=result.matrix.gender,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = gender), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up by Gender", col = "Variables", shape = "Gender")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.gender
+```
+
+```{r}
+ace_gender[[2]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.gender.1<-ace_gender[[2]]%>%filter(variable!="Time")
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+result.matrix.gender.1$gender<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Male", "Female"))
+result.matrix.gender.1$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.gender.1<- ggplot(data=result.matrix.gender.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = gender), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up by Gender", col = "Variables", shape = "Gender")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.gender.1
+```
+
+
+```{r}
+ace_list<-c("ace_c2","ACE_TOT")
+
+ace_int_gender<-lapply(ace_list, function(x){
+  result.matrix.x<-matrix(NA, nrow = 6, ncol = 3)
+  #result.matrix.x[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+  for (i in 1:3) {
+    pa<-lapply(imp_list_gender, function(data){
+    res<-glm.ace.int(data,x, outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(10,12)]
+    names(beta)<-c("ACE:Time","ACE:Time:GENDER")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(10,12)]
+    names(se)<-c("ACE:Time","ACE:Time:GENDER")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(2*i-1):(2*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(2*i-1):(2*i),2]<-summary(pool.re)[["p"]]
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:"p-value"), as.numeric)
+  result.matrix.x[,3]<-factor(c(rep(1,2),rep(2,2),rep(3,2)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+```{r}
+ace_int_gender[[1]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("4+ ACEs:Gender","4+ ACEs:Gender:Time"))
+
+ace_int_gender[[2]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("ACEs score:Gender","ACEs score:Gender:Time"))
+
+```
+
