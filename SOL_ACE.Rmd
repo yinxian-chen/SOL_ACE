@@ -1201,6 +1201,58 @@ ace_ancestry<-lapply(ace_list, function(x){
 
 ```
 
+```{r}
+ace_ancestry[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+ace_ancestry[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.anc<-rbind(result.matrix,ace_ancestry[[1]])
+result.matrix.anc$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Ancestry background"))
+result.matrix.anc$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.anc<- ggplot(data=result.matrix.anc,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.anc
+```
+
+```{r}
+ace_ancestry[[2]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+ace_ancestry[[2]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.anc.1<-rbind(result.matrix.1,ace_ancestry[[2]])
+result.matrix.anc.1$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Ancestry background"))
+result.matrix.anc.1$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.anc.1<- ggplot(data=result.matrix.anc.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.anc.1
+```
+
 #### Complete case analysis
 
   - Evidence that not dealing with missing value may lead to overestimated results.
@@ -1227,6 +1279,57 @@ cca.list<-lapply(ace_list,function(x) {
 
 ```
 
+```{r}
+cca.list[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+result.matrix.cca$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Multiple-imputation analysis", "Complete-case analysis"))
+result.matrix.cca$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.cca<- ggplot(data=result.matrix.cca,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.cca
+```
+
+```{r}
+cca.list[[2]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+cca.list[[2]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.cca.1<-rbind(result.matrix.1,cca.list[[2]])
+result.matrix.cca.1$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Multiple-imputation analysis", "Complete-case analysis"))
+result.matrix.cca.1$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
+
+
+
+ana.plot.cca.1<- ggplot(data=result.matrix.cca.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = model), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up", col = "Variables", shape = "Model")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.cca.1
+```
 
 
 ```{r, echo=F}
