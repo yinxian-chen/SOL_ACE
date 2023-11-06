@@ -205,9 +205,6 @@ missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
 
 
 
-
-
-
 ```{r, include=F}
 ### Convert into the long format for longitudinal analysis
 sol.ana.long<-reshape(data = sol.ana.1,
@@ -230,101 +227,6 @@ sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na
 
 ```
 
-```{r, echo=F}
-result.summary<-function(data, exposure, covar="normal") {
-  
-  exposure<-exposure
-  covar<-covar
-  
-  if(exposure =="ace_c4"){
-    gee.summary.1<-matrix(NA,nrow = 10, ncol = 4)
-    for(i in c(1:10)) {
-      indices<-c(2,3,4,10,11,2,3,4,19,20)
-      if (i<=5) {
-        gee.summary.1[i,1]<-data[[1]]$beta[indices[i]]
-        gee.summary.1[i,2]<-data[[1]]$beta[indices[i]]-1.96*data[[1]]$SE[indices[i]]
-        gee.summary.1[i,3]<-data[[1]]$beta[indices[i]]+1.96*data[[1]]$SE[indices[i]]
-        gee.summary.1[i,4]<-data[[1]]$p_z[indices[i]]
-      }
-      
-      else {
-        gee.summary.1[i,1]<-data[[2]]$beta[indices[i]]
-        gee.summary.1[i,2]<-data[[2]]$beta[indices[i]]-1.96*data[[2]]$SE[indices[i]]
-        gee.summary.1[i,3]<-data[[2]]$beta[indices[i]]+1.96*data[[2]]$SE[indices[i]]
-        gee.summary.1[i,4]<-data[[2]]$p_z[indices[i]]
-      }
-    }
-    rownames(gee.summary.1)<-rep(c("1-3 ACEs",">=4 ACEs","Time","1-3 ACEs*Time",">=4 ACEs*Time"),2)
-  }
-  
-  else{
-    if(covar=="normal") {
-      gee.summary.1<-matrix(NA,nrow = 6, ncol = 4)
-      for (i in c(1:6)) {
-        indices<-c(2,3,9,2,3,18)
-        if (i<=3) {
-          
-          gee.summary.1[i,1]<-data[[1]]$beta[indices[i]]
-          gee.summary.1[i,2]<-data[[1]]$beta[indices[i]]-1.96*data[[1]]$SE[indices[i]]
-          gee.summary.1[i,3]<-data[[1]]$beta[indices[i]]+1.96*data[[1]]$SE[indices[i]]
-          gee.summary.1[i,4]<-data[[1]]$p_z[indices[i]]
-        }
-        
-        else {
-          gee.summary.1[i,1]<-data[[2]]$beta[indices[i]]
-          gee.summary.1[i,2]<-data[[2]]$beta[indices[i]]-1.96*data[[2]]$SE[indices[i]]
-          gee.summary.1[i,3]<-data[[2]]$beta[indices[i]]+1.96*data[[2]]$SE[indices[i]]
-          gee.summary.1[i,4]<-data[[2]]$p_z[indices[i]]
-        }
-      }
-      
-      if(exposure=="ace_c2"){
-        rownames(gee.summary.1)<-rep(c(">=4 ACEs", "Time", ">=4 ACEs*Time"),2)
-      }
-      else {
-        rownames(gee.summary.1)<-rep(c("ACEs total score", "Time", "ACEs total score*Time"),2)
-      }
-    }
-    
-    if(covar=="ancenstry") {
-      gee.summary.1<-matrix(NA,nrow = 3, ncol = 4)
-      for(i in c(1:3)) {
-        indices<-c(2,3,23)
-        gee.summary.1[i,1]<-data$beta[indices[i]]
-        gee.summary.1[i,2]<-data$beta[indices[i]]-1.96*data$SE[indices[i]]
-        gee.summary.1[i,3]<-data$beta[indices[i]]+1.96*data$SE[indices[i]]
-        gee.summary.1[i,4]<-data$p_z[indices[i]]
-      }
-      if(exposure=="ace_c2"){
-        rownames(gee.summary.1)<-c(">=4 ACEs", "Time", ">=4 ACEs*Time")
-      }
-      else {
-        rownames(gee.summary.1)<-c("ACEs total score", "Time", "ACEs total score*Time")
-      }
-    }
-    
-    if(covar=="cell_type") {
-      gee.summary.1<-matrix(NA,nrow = 3, ncol = 4)
-      for(i in c(1:3)) {
-        indices<-c(2,3,24)
-        gee.summary.1[i,1]<-data$beta[indices[i]]
-        gee.summary.1[i,2]<-data$beta[indices[i]]-1.96*data$SE[indices[i]]
-        gee.summary.1[i,3]<-data$beta[indices[i]]+1.96*data$SE[indices[i]]
-        gee.summary.1[i,4]<-data$p_z[indices[i]]
-      }
-      if(exposure=="ace_c2"){
-        rownames(gee.summary.1)<-c(">=4 ACEs", "Time", ">=4 ACEs*Time")
-      }
-      else {
-        rownames(gee.summary.1)<-c("ACEs total score", "Time", "ACEs total score*Time")
-      }
-    }
-  }
-  
-  colnames(gee.summary.1)<-c("beta","ll","ul","p-value")
-  return(gee.summary.1)
-}
-```
 
 ### Longitudinal analysis setup
 
@@ -359,17 +261,6 @@ result.summary<-function(data, exposure, covar="normal") {
   - The GEE cannot handle the imbalanced design in the longitudinal study
   
     - So only GLMM could be used here
-
-```{r}
-# Consistency between baseline age and age at first epigenetic age measurement
-summary(sol.ana.1$age_v1-sol.ana.1$AGE)
-# Interval between first and second measurement
-table(sol.ana.1$age_v2-sol.ana.1$AGE)
-# Subjects that had the interval <3 or >9
-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
-outlier_ID<-sol.ana.1$ID[which((sol.ana.1$age_v2-sol.ana.1$AGE<3|sol.ana.1$age_v2-sol.ana.1$AGE>9))]
-
-```
 
 #### Create separate dataset for different ACEs indicators
 ```{r}
@@ -457,76 +348,6 @@ imp_list_new<-lapply(imp_list, function(data) {
 
 ```
   
-```{r}
-pa.1<-lapply(imp_list_new, function(data){
-  res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
-  return(res.1)
-})
-
-qhat<-lapply(pa.1, function(re){
-  beta<-re$beta[c(2:3,10)]
-  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(beta)
-})
-
-se<-lapply(pa.1, function(re){
-  se<-re$SE[c(2:3,10)]
-  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(se)
-})
-
-pool.1 <- pool_mi( qhat=qhat, se=se )
-
-summary(pool.1)
-```
-  
-  
-```{r}
-pa.2<-lapply(imp_list_new, function(data){
-  res.2<-glm.ace.ub(data,"ace_c2","eage_grim")
-  return(res.2)
-})
-
-qhat<-lapply(pa.2, function(re){
-  beta<-re$beta[c(2:3,10)]
-  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(beta)
-})
-
-se<-lapply(pa.2, function(re){
-  se<-re$SE[c(2:3,10)]
-  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(se)
-})
-
-pool.2 <- pool_mi( qhat=qhat, se=se )
-
-summary(pool.2)
-```
-  
-  
-```{r}
-pa.3<-lapply(imp_list_new, function(data){
-  res.3<-glm.ace.ub(data,"ace_c2","dunedin")
-  return(res.3)
-})
-
-qhat<-lapply(pa.3, function(re){
-  beta<-re$beta[c(2:3,10)]
-  names(beta)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(beta)
-})
-
-se<-lapply(pa.3, function(re){
-  se<-re$SE[c(2:3,10)]
-  names(se)<-c(">=4 ACEs","Time", ">=4 ACEs:Time")
-  return(se)
-})
-
-pool.3 <- pool_mi( qhat=qhat, se=se )
-
-summary(pool.3)
-```
   
 ```{r}
 outcome_list<-c("eaa_grim","eage_grim","dunedin")
@@ -642,39 +463,6 @@ ana.plot.1<- ggplot(data=result.matrix.1,
 ana.plot.1
 ```
 
-
-```{r, echo=F}
-ana.1.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eaa_grim") #Binary ACE (<4 vs. >=4) and EAA GrimAge
-#ana.1.ub
-ana.2.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "eage_grim") #Binary ACE (<4 vs. >=4) and Epigenetic age change using GrimAge
-#ana.2.ub
-ana.3.ub<-glm.ace.ub("sol.ana.long.ub", "ace_c2", "dunedin") #Binary ACE (<4 vs. >=4) and Epigenetic age Pace
-#ana.3.ub
-ana.4.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eaa_grim") #Continuous ACE and EAA GrimAge
-#ana.4.ub
-ana.5.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "eage_grim") #Continuous ACE and Epigenetic age change using GrimAge
-#ana.5.ub
-ana.6.ub<-glm.ace.ub("sol.ana.long.ub", "ACE_TOT", "dunedin") #Continuous ACE and Epigenetic age Pace
-#ana.6.ub
-
-summary.1.ub<-result.summary(ana.1.ub, exposure = "ace_c2")
-summary.2.ub<-result.summary(ana.2.ub, exposure = "ace_c2")
-summary.3.ub<-result.summary(ana.3.ub, exposure = "ace_c2")
-summary.4.ub<-result.summary(ana.4.ub, exposure = "ACE_TOT")
-summary.5.ub<-result.summary(ana.5.ub, exposure = "ACE_TOT")
-summary.6.ub<-result.summary(ana.6.ub, exposure = "ACE_TOT")
-```
-
-```{r, echo=F}
-test.3<-rbind(summary.1.ub,summary.4.ub,summary.2.ub,
-              summary.5.ub,summary.3.ub,summary.6.ub)
-
-
-kable(test.3, format = "latex", booktabs = T, digits = 3, 
-      caption = "Association of ACEs with EAA using different ACEs variables and EAA indicators")%>% 
-  add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=12, "GrimAge"=12,"DunedinPACE"=12))%>%
-  pack_rows(index = rep(c("Model 1" = 3, "Model 2" = 3),6))
-``` 
 
 ### Sensitivity analysis
 
@@ -835,8 +623,6 @@ ana.plot.cell.1<- ggplot(data=result.matrix.cell.1,
 
 ana.plot.cell.1
 ```
-
-
 
 
 #### Parental separate as the covariate
@@ -1257,6 +1043,8 @@ ana.plot.anc.1
 
   - Evidence that not dealing with missing value may lead to overestimated results.
 
+
+
 ```{r}
 sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE")]),]
 sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ace_c2=ifelse(ACE_TOT<4,0,1))
@@ -1264,6 +1052,9 @@ sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ma_ace_c2 = ace_c2*I(GENDER==0),
                                             fe_ace_c2 = ace_c2*I(GENDER==1),
                                             ma_ACE_TOT = ACE_TOT*I(GENDER==0),
                                             fe_ACE_TOT = ACE_TOT*I(GENDER==1))
+#add position
+sol.ana.long.cca$t<-rep(c(1,2),(nrow(sol.ana.long.cca))/2)
+
 
 cca.list<-lapply(ace_list,function(x) {
    result.matrix.x<-matrix(NA, nrow = 9, ncol = 5)
@@ -1281,26 +1072,47 @@ cca.list<-lapply(ace_list,function(x) {
    return(result.matrix.x)
 })
 
-test.res<-lme(eaa_grim~ma_ace_c2+fe_ace_c2+age_change+ma_ace_c2:age_change+fe_ace_c2:age_change+GENDER+ AGE,
-              data = sol.ana.long.cca,
-              random = ~1+age_change|ID,
-              weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-              method = "REML",
-              na.action = na.omit)
-
-summary(test.res)
-
-test.res.1<-lme(eaa_grim~ma_ACE_TOT+fe_ACE_TOT+age_change+ma_ACE_TOT:age_change+fe_ACE_TOT:age_change+GENDER,
-              data = sol.ana.long.cca,
-              random = ~1+age_change|ID,
-              weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-              method = "REML",
-              na.action = na.omit)
-
-summary(test.res.1)
-
-test.res
 ```
+
+```{r}
+gee.ace<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
+  model.1<-gls(formula_1, 
+               data = data,
+               corr=corCompSymm(form = ~ t | ID),#t is the variable in the long format indicating the occasion of measurements (t = rep(c(1,2),sample size))
+               weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
+               method = "REML",
+               na.action = na.omit)
+  
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  return(robust.1)
+}
+
+
+result.matrix.gee<-matrix(NA, nrow = 9, ncol = 5)
+result.matrix.gee[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+   for (i in 1:3) {
+     res.1<-gee.ace(sol.ana.long.cca,"ace_c2",outcome_list[i])
+     res.1<-res.1[c(2:3,10),]
+     result.matrix.gee[(3*i-2):(3*i),1]<-res.1$beta
+     result.matrix.gee[(3*i-2):(3*i),2]<-res.1$p_z
+     result.matrix.gee[(3*i-2):(3*i),3]<-res.1$beta - 1.96*res.1$SE
+     result.matrix.gee[(3*i-2):(3*i),4]<-res.1$beta + 1.96*res.1$SE
+   }
+colnames(result.matrix.gee)<-c("beta","p-value","lower","upper","outcome")
+result.matrix.gee<-as.data.frame(result.matrix.gee)%>%mutate_at(vars(beta:upper), as.numeric)
+
+
+res.1<-gee.ace(sol.ana.long.cca,"ace_c2","eaa_grim")
+getVarCov(res.1)
+
+res.1
+```
+
+
+
+
 
 ```{r}
 cca.list[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
@@ -1495,7 +1307,6 @@ ana.plot.gender.1<- ggplot(data=result.matrix.gender.1,
 ana.plot.gender.1
 ```
 
-
 ```{r}
 ace_list<-c("ace_c2","ACE_TOT")
 
@@ -1537,5 +1348,197 @@ ace_int_gender[[1]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c(
 
 ace_int_gender[[2]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("ACEs score:Gender","ACEs score:Gender:Time"))
 
+ace_int_gender[[1]]
+ace_int_gender[[2]]
+
 ```
+
+
+#### Stratified analysis by Borning in the US
+
+```{r}
+imp_list_US_born<-lapply(imp_list_new, function(data) {
+  data<-data%>%mutate(nusb_ace_c2 = ace_c2*I(US_BORN==0),
+                      usb_ace_c2 = ace_c2*I(US_BORN==1),
+                      nusb_ACE_TOT = ACE_TOT*I(US_BORN==0),
+                      usb_ACE_TOT = ACE_TOT*I(US_BORN==1))
+  return(data)
+})
+```
+
+```{r}
+glm.ace.usb<-function(data, exposure.1, exposure.2, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure.1, "+", exposure.2, "+ age_change + AGE + GENDER + US_BORN + fa_edu_3c + ma_edu_3c + age_change:", exposure.1, "+ age_change:", exposure.2))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+
+glm.ace.int.usb<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure, "+ age_change + AGE + GENDER + US_BORN + fa_edu_3c + ma_edu_3c + US_BORN:", exposure, "+ age_change:", exposure, "+ age_change:US_BORN:", exposure))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+```
+
+
+```{r}
+ace_indicator_1<-c("nusb_ace_c2","usb_ace_c2","nusb_ACE_TOT","usb_ACE_TOT")
+ace_position<-c(1,2)
+
+ace_usborn<-lapply(ace_position, function(x){
+  result.matrix.x<-matrix(NA, nrow = 15, ncol = 5)
+  for (i in 1:3) {
+    pa<-lapply(imp_list_US_born, function(data){
+    res<-glm.ace.usb(data,ace_indicator_1[2*x-1], ace_indicator_1[2*x], outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(2:4,12:13)]
+    names(beta)<-c("ACE (non-US-born)","ACE (US-born)","Time", "ACE:Time (non-US-born)","ACE:Time (US-born)")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(2:4,12:13)]
+    names(se)<-c("ACE (non-US-born)","ACE (US-born)","Time", "ACE:Time (non-US-born)","ACE:Time (US-born)")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(5*i-4):(5*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(5*i-4):(5*i),2]<-summary(pool.re)[["p"]]
+  result.matrix.x[(5*i-4):(5*i),3]<-summary(pool.re)[["(lower"]]
+  result.matrix.x[(5*i-4):(5*i),4]<-summary(pool.re)[["upper)"]]
+
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
+  result.matrix.x[,5]<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+```{r}
+ace_usborn[[1]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.usb<-ace_usborn[[1]]%>%filter(variable!="Time")
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+result.matrix.usb$US_BORN<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+result.matrix.usb$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.usb<- ggplot(data=result.matrix.usb,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = US_BORN), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up by Birth Place", col = "Variables", shape = "Birth Place")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.usb
+```
+
+```{r}
+ace_usborn[[2]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.usb.1<-ace_usborn[[2]]%>%filter(variable!="Time")
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+result.matrix.usb.1$US_BORN<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+result.matrix.usb.1$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.usb.1<- ggplot(data=result.matrix.usb.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = US_BORN), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up by Birth Place", col = "Variables", shape = "Birth place")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.usb.1
+```
+
+```{r}
+ace_list<-c("ace_c2","ACE_TOT")
+
+ace_int_usb<-lapply(ace_list, function(x){
+  result.matrix.x<-matrix(NA, nrow = 6, ncol = 3)
+  #result.matrix.x[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+  for (i in 1:3) {
+    pa<-lapply(imp_list_US_born, function(data){
+    res<-glm.ace.int.usb(data,x, outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(11,13)]
+    names(beta)<-c("ACE:US_BORN","ACE:Time:US_BORN")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(11,13)]
+    names(se)<-c("ACE:US_BORN","ACE:Time:US_BORN")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(2*i-1):(2*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(2*i-1):(2*i),2]<-summary(pool.re)[["p"]]
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:"p-value"), as.numeric)
+  result.matrix.x[,3]<-factor(c(rep(1,2),rep(2,2),rep(3,2)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+```{r}
+ace_int_usb[[1]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("4+ ACEs:US_BORN","4+ ACEs:US_BORN:Time"))
+
+ace_int_usb[[2]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("ACEs score:US_BORN","ACEs score:US_BORN:Time"))
+
+ace_int_usb[[1]]
+ace_int_usb[[2]]
+
+```
+
+
 
