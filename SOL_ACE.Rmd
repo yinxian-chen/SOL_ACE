@@ -199,10 +199,68 @@ missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
 
 #sol.ana.1<-sol.ana.1%>%filter(!is.na(ACE_TOT))
 
+sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select(-ACE_TOT)
 
 #summary(sol.ana.1$ACE_TOT_ND)
 ```
 
+
+### Multiple imputation
+
+```{r}
+predma<-quickpred(sol.ana.imp, exclude = c("ID","WEIGHT_NORM_OVERALL_EPIGEN","age_v1","age_v2"))
+imp_1<-mice(sol.ana.imp, m=1, predictorMatrix = predma, print = F)
+#summary(sol.ana.long.1)
+
+#imp_1$predictorMatrix
+#predma
+predmethod<-imp_1$method
+#predmethod
+#summary(complete(imp_1))
+
+#lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
+#RE <- 0.95
+#lambda/(RE^(-1)-1) #5
+
+set.seed(981119)
+
+imp_5<-mice(sol.ana.imp, m=5, maxit = 10, predictorMatrix = predma, method = predmethod, print = F)
+
+plot(imp_5)
+
+imp_list<-datlist_create(imp_5)
+```
+
+
+```{r}
+imp_list_new<-lapply(imp_list, function(data) {
+  data$ACE_TOT<-rowSums(data[,names(data)%in%ace.2], na.rm = T)
+  data$ACE_TOT_ND<-rowSums(data[,names(data)%in%ace.2[-6]], na.rm = T)
+  data<-data%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
+                      ace_c3 = factor(ifelse(ACE_TOT==0,1,
+                                      ifelse(ACE_TOT<4,2,3))),
+                      ace_c2_ND = ifelse(ACE_TOT_ND<4,0,1),
+                      ace_c3_ND = factor(ifelse(ACE_TOT_ND==0,1,
+                                      ifelse(ACE_TOT<4,2,3))))
+  #res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
+  data<-reshape(data = data,
+                      varying = list(c("eaa_grim_v1","eaa_grim_v2"),c("eage_grim_v1","eage_grim_v2"),
+                                     c("age_v1","age_v2"), c("dunedin_v1","dunedin_v2"),c("NK_1","NK_2"),
+                                     c("B_1","B_2"),c("MO_1","MO_2"),c("GR_1","GR_2"),
+                                     c("CD4_1","CD4_2"),c("CD8_1","CD8_2")),
+                      v.names = c("eaa_grim","eage_grim","age_t","dunedin","NK","B","MO",
+                                  "GR","CD4","CD8"),
+                      idvar = "ID",
+                      timevar = "time",
+                      times = c(0,6),
+                      direction = "long")
+  data<-data[order(data$ID),]
+  data<-data%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na(US_BORN),ifelse(AGE-YRSUS<18,2,3),1)),
+                                    age_change = age_t-AGE)
+  return(data)
+}
+  )
+```
 
 
 ```{r, include=F}
@@ -226,6 +284,8 @@ sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na
                                     GENDER = factor(ifelse(GENDER=="M",0,1)))%>%select(-c(age_t,time))
 
 ```
+
+
 
 
 ### Longitudinal analysis setup
@@ -299,6 +359,9 @@ plot(imp_5)
 imp_list<-datlist_create(imp_5)
 
 ```
+
+
+
 ```{r}
 ### Unbalance design
 glm.ace.ub<-function(data, exposure, outcome) {
@@ -351,6 +414,7 @@ imp_list_new<-lapply(imp_list, function(data) {
   
 ```{r}
 outcome_list<-c("eaa_grim","eage_grim","dunedin")
+#rm(result.matrix)
 result.matrix<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 for (i in 1:3) {
@@ -521,6 +585,9 @@ result.matrix.3[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 colnames(result.matrix.3)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.3<-as.data.frame(result.matrix.3)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
+
+
+
 ```{r}
 result.matrix.4<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.4[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
@@ -554,6 +621,8 @@ result.matrix.4[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 colnames(result.matrix.4)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.4<-as.data.frame(result.matrix.4)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
+
+
 
 ```{r}
 result.matrix.3$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
@@ -765,23 +834,6 @@ ana.plot.nd.1<- ggplot(data=result.matrix.nd.1,
 ana.plot.nd.1
 ```
 
-
-
-```{r, echo=F}
-test.1<-rbind(summary.1.ml.cell,
-            summary.4.ml.cell,
-            summary.2.ml.cell,
-            summary.5.ml.cell,
-            summary.3.ml.cell,
-            summary.6.ml.cell)
-
-kable(test.1, format = "latex", booktabs = T, digits = 3, 
-      caption = "Sensitivity Analysis by Adjusting for Cell Types")%>% 
-  add_header_above(c(" " = 1, "GLM" = 4))%>% 
-  pack_rows(index = c("GrimAA"=6, "GrimAge"=6,"DunedinPACE"=6))%>%
-  pack_rows(index = rep(c("Model 2 + cell types" = 3),6))
-```
-
 #### Using three-level ACEs
 
   - When changing the reference group from "<4 ACEs" to "No ACE", the association was better revealed in **GrimAA** and **GrimAge**, but not **DunedinPACE**
@@ -826,29 +878,24 @@ colnames(result.matrix.2)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.2<-as.data.frame(result.matrix.2)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
-```{r, echo=F}
-#### GLM
-ana.1.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "eaa_grim") # EAA GrimAge
-#ana.1.ml.4c
+```{r}
+result.matrix.2$variable<-factor(rep(c(1, 2, 3, 4, 5),3), levels = c(1,2,3,4,5), labels = c("1-3 ACEs", "4+ ACE", "Time", "1-3 ACEs*Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.2$outcome<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
-ana.2.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "eage_grim") #Epigenetic age change using GrimAge
-#ana.2.ml.4c
+ana.plot.3c<- ggplot(data=result.matrix.2,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable), size=2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs and EAA over Average Six-year Follow-up", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
 
-ana.3.ml.4c<-glm.ace.ub("sol.ana.long.ub", "ace_c4", "dunedin") # Epigenetic age Pace
-#ana.3.ml.4c
 
-summary.1.4c.ml<-result.summary(ana.1.ml.4c, "ace_c4")
-summary.2.4c.ml<-result.summary(ana.2.ml.4c, "ace_c4")
-summary.3.4c.ml<-result.summary(ana.3.ml.4c, "ace_c4")
-```
-
-```{r, echo=F}
-test.2<-rbind(summary.1.4c.ml,
-             summary.2.4c.ml,
-             summary.3.4c.ml)
-
-kable(test.2, format = "latex", booktabs = T, digits = 3, caption = "Sensitivity Analaysis by Using Three-levels ACEs")%>% add_header_above(c(" " = 1, "GLM" = 4))%>% pack_rows(index = c("GrimAA"=10, "GrimAge"=10,"DunedinPACE"=10))%>%
-  pack_rows(index = rep(c("Model 1" = 5, "Model 2" = 5),3))
+ana.plot.3c
 ```
 
 
@@ -912,21 +959,6 @@ imp_list_ac<-lapply(imp_list_new, function(data){
   return(data)
 })
 
-
-```
-
-
-```{r}
-# Consistency between baseline age and age at first epigenetic age measurement
-summary(sol.ana.ac$age_v1-sol.ana.ac$AGE)
-# Interval between first and second measurement
-table(sol.ana.ac$age_v2-sol.ana.ac$AGE)
-# Subjects that had the interval <3 or >9
-sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
-outlier_ID_ac<-sol.ana.ac$ID[which((sol.ana.ac$age_v2-sol.ana.ac$AGE<3|sol.ana.ac$age_v2-sol.ana.ac$AGE>9))]
-
-# Exclude the outlier
-sol.ana.long.ac.ub<-sol.ana.long.ac%>%filter(!ID%in%outlier_ID_ac)
 ```
 
 
@@ -1112,8 +1144,6 @@ res.1
 
 
 
-
-
 ```{r}
 cca.list[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
@@ -1165,6 +1195,8 @@ ana.plot.cca.1<- ggplot(data=result.matrix.cca.1,
 
 ana.plot.cca.1
 ```
+
+
 ### Potential effect modification
 
 #### Stratified analysis by sex
