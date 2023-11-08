@@ -25,7 +25,7 @@ library(readxl)
 library(ggplot2)
 ```
 
-```{r}
+```{r, include=F}
 sol.pheno<-read.csv("pheno_final_983obs_withcells.csv")
 sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_100523.csv")
 sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
@@ -42,7 +42,11 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
 
   - The primary analysis focused on binary ACEs (<4 ACEs vs. >=4 ACEs), and total ACEs score (continuous)
   
-  - In sensitivity analysis, also focused the three-level ACEs (0, 1-3, >=4 ACEs)
+  - In sensitivity analysis:
+  
+    - Three-level ACEs (0, 1-3, >=4 ACEs)
+    
+    - Individual items of ACE
   
 #### Outcome
 
@@ -58,25 +62,23 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
 
 #### Covariates
 
-  - First set (adjusted in Model 1)
+  - Potential confounders
   
     - Baseline Age
     
     - Gender
     
-    - Study center
+    - Maternal education levels (< high school, high school, > high school)
     
-    - Time variable (AGE_V2-AGE_V1)
+    - Paternal education levels (< high school, high school, > high school)
+    
+    - Interval between two visit (served as the time variable)
+    
+  - Variables required in the longitudinal analysis
+  
+    - Interval between two visits (served as the time variable)
     
     - ACEs*Time (To indicate the additional change in rate of EAA by ACEs)
-  
-  - Second set (further adjusted in Model 2)
-  
-    - Education attainment (less than high school vs. high school and above)
-    
-    - Age at arrival in the US (born in the US, arrived before 18y, arrived after 18y)
-    
-    - Hispanic/Latino background (Central American, Cuba, Dominican, Dominican, Puerto Rican, South American, Mixed/Other)
     
   - For sensitivity analysis:
   
@@ -84,7 +86,14 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
     
     - Ancestry background (five principal components)
     
-**Additional information**: One subject's (ID: 1494646) AGE_V1 > AGE_V2. I have flipped the subject's age to the right position.
+    - Parental separation as a covariate (use rest of the ACE items to calculate the score and dichotomize)
+    
+  - Secondary analysis (for potential EMM)
+  
+    - Sex-specific estimate
+    
+    - Birth-place-specific estimate
+    
     
 ```{r, include=F}
 ## Data preparation
@@ -112,16 +121,16 @@ sol.ac.pc<-sol.ac%>%select(c(HCHS_ID,EV1,EV2,EV3,EV4,EV5))
 
 #### check age
 
-check_age<-merge(correct_age, sol.pheno[,c("ID","AGE_correct")], by = "ID")
-check_age<-check_age%>%mutate(age_diff = AGE_CORRECTED-AGE_correct)
-table(check_age$age_diff)
+#check_age<-merge(correct_age, sol.pheno[,c("ID","AGE_correct")], by = "ID")
+#check_age<-check_age%>%mutate(age_diff = AGE_CORRECTED-AGE_correct)
+#table(check_age$age_diff)
 
 sol.pheno<-merge(correct_age, sol.pheno, by="ID", all.y = T)
 
 sol.pheno<-sol.pheno%>%mutate(AGE_correct = ifelse(is.na(AGE_CORRECTED),AGE_correct,AGE_CORRECTED))
 sol.pheno<-sol.pheno%>%mutate(AGE = AGE_correct)%>%select(-c(AGE_correct,AGE_V1_correct))
 
-sol.pheno[!is.na(sol.pheno$AGE_CORRECTED),c("ID","AGE","AGE_CORRECTED")]
+#sol.pheno[!is.na(sol.pheno$AGE_CORRECTED),c("ID","AGE","AGE_CORRECTED")]
 
 sol.pheno$ID<-as.numeric(sol.pheno$ID)
 
@@ -190,23 +199,58 @@ sol.ana.1$age_v1<-sol.ana.1$AGE
 #sol.ana.1<-sol.ana.1%>%select(-c(PIEA22A,PIEA23A))
 
 
-missing_rate<-do.call("cbind",lapply(sol.ana.1, function(x)
-  rbind(sum(is.na(x)),100*sum(is.na(x)/dim(sol.ana.1)[1]))))
-colnames(missing_rate)<-names(sol.ana.1)
-round(missing_rate, 2)
 
-missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
-
-#sol.ana.1<-sol.ana.1%>%filter(!is.na(ACE_TOT))
-
-sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select(-ACE_TOT)
 
 #summary(sol.ana.1$ACE_TOT_ND)
 ```
 
-### Multiple imputation
+### Missing data issue
+
+  - Over 10% of subjects missed the data of parental education
+  
+    - Unlikely to be Missing Completely at Random (MCAR) because most missing value is not due to non-response but that subjects or their parents forgot.
+    
+    - Therefore, it may depend on age, sex, current SES, ethnicity background...
+    
+  - Instead of just ignoring it, better to address it
+  
+    - Multiple imputation was applied in the primary analysis
+    
+    - Complete-case analysis was used as the sensitivity analysis
 
 ```{r}
+missing_rate<-do.call("cbind",lapply(sol.ana.1, function(x)
+  rbind(sum(is.na(x)),100*sum(is.na(x)/dim(sol.ana.1)[1]))))
+colnames(missing_rate)<-names(sol.ana.1)
+rownames(missing_rate)<-c("N_miss","%_miss")
+round(missing_rate, 2)
+
+
+
+#missing_ace<-sol.ana.1%>%filter(is.na(ACE_TOT))%>%select(c(STEA11:STEA20))
+
+#sol.ana.1<-sol.ana.1%>%filter(!is.na(ACE_TOT))
+
+sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select(-ACE_TOT)
+```
+
+
+### Multiple imputation
+
+  - Impute all missing data in our dataset (including ACE items, parental education levels, and other covariates)
+  
+  - All covariates + outcome + additional SES variables (years in the US, current education attainment, income level, and ethnicity background) were involved in the imputation
+  
+  - To improve computability, only variables have >0.1 correlation with the missing variables itself or missingness of those variables were finally included in predictions.
+  
+  - To achieve relative efficiency=0.95, five imputed datasets should be generated
+  
+    - Five replications + ten iterations in each dataset were set up in the imputation
+  
+  - The imputed plots showed that the convergence is acceptable, meaning that we can move to the next step
+  
+
+```{r,echo=F}
 predma<-quickpred(sol.ana.imp, exclude = c("ID","WEIGHT_NORM_OVERALL_EPIGEN","age_v1","age_v2"))
 imp_1<-mice(sol.ana.imp, m=1, predictorMatrix = predma, print = F)
 #summary(sol.ana.long.1)
@@ -217,9 +261,9 @@ predmethod<-imp_1$method
 #predmethod
 #summary(complete(imp_1))
 
-#lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
-#RE <- 0.95
-#lambda/(RE^(-1)-1) #5
+lambda <- 1- sum(complete.cases(sol.ana.imp))/dim(sol.ana.imp)[1]
+RE <- 0.95
+lambda/(RE^(-1)-1) #5
 
 set.seed(981119)
 
@@ -231,7 +275,7 @@ imp_list<-datlist_create(imp_5)
 ```
 
 
-```{r}
+```{r, include=F}
 imp_list_new<-lapply(imp_list, function(data) {
   data$ACE_TOT<-rowSums(data[,names(data)%in%ace.2], na.rm = T)
   data$ACE_TOT_ND<-rowSums(data[,names(data)%in%ace.2[-6]], na.rm = T)
@@ -286,132 +330,29 @@ sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na
 
 
 
-
 ### Longitudinal analysis setup
 
-  - Generalized estimating equations (GEE) and Generalized linear mixed-effect models (GLMM)
+  - Generalized linear mixed-effect models (GLMM) was applied here
   
-  - Each model can be weighted by the the sampling weight for each subject
+  - Cluster-robust variance estimator was applied (everyone had different weight)
   
-  - Advantages to use the longitudinal analysis approach:
+  - Interpretations for the core coeffcients:
   
-    - Can gain the estimates of associations in interest simultaneously:
+    - ACEs: the difference in the first-visit EAA among those having more ACEs compared with those with less ACEs.
     
-      - Association between ACEs and the EAA at baseline
-      
-      - Association between ACEs and the rate of change in EAA from time 1 to time 2
-      
-    - More powerful than modeling two outcomes separately and can also have a consistent interpretation
+    - Time: the rate of change in EAA from first to second visit among those with less ACEs (reference group) 
     
-  - Robust variance estimator (sandwish estimator) was used to account for the sampling weight
+    - ACEs*Time: the difference in rate of change in EAA among those having more ACEs compared with those with less ACEs
 
-#### Imbalanced desgin
-
-  - We can see that not all participants were measured the second epigenetic age after 6 years from the first visit
-  
-  - Also, there were some outliers with unreasonable interval between two visits
-  
-    - First visit (2008-2011) and Second visit (2014-2017)
-    
-      - So the range of the interval should be [2014-2011, 2017-2008] = [3, 9] years
-  
-    - I removed those out of this range in the analysis but will definitely add them back if necessary
-  
-  - The GEE cannot handle the imbalanced design in the longitudinal study
-  
-    - So only GLMM could be used here
-
-#### Create separate dataset for different ACEs indicators
-```{r}
-### Primary analysis (total score)
-sol.ana.long.1<-sol.ana.long[,!names(sol.ana.long)%in%c(ace.1)]
-
-### Sensitivity 1 (each type of ACE)
-
-### Sensitivity 2 (parental separate as covariate)
-```
-
-
-### Test for multiple imputation analysis
-
-```{r}
-predma<-quickpred(sol.ana.long.1, exclude = c("ID","WEIGHT_NORM_OVERALL_EPIGEN"))
-imp_1<-mice(sol.ana.long.1, m=1, predictorMatrix = predma, print = F)
-#summary(sol.ana.long.1)
-
-#imp_1$predictorMatrix
-#predma
-predmethod<-imp_1$method
-#predmethod
-#summary(complete(imp_1))
-
-#lambda <- 1- sum(complete.cases(sol.ana.long.1))/dim(sol.ana.long.1)[1]
-#RE <- 0.95
-#lambda/(RE^(-1)-1) #5
-
-set.seed(981119)
-
-imp_5<-mice(sol.ana.long.1, m=5, maxit = 10, predictorMatrix = predma, method = predmethod, print = F)
-
-plot(imp_5)
-
-imp_list<-datlist_create(imp_5)
-
-```
-
-
-
-```{r}
-### Unbalance design
-glm.ace.ub<-function(data, exposure, outcome) {
-  
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
-  model.1<-lme(formula_1, 
-               data = data,
-               random = ~1+age_change|ID,
-               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
-               method = "REML",
-               na.action = na.omit)
-  #print(summary(model.1))
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  
-  return(robust.1)
-}
-```
 
 ### Primary analysis
 
-  - Although statistically insignificant in all Model 2 (adjusted for the proximal childhood SES)
+  - Both 4+ ACEs and ACEs score is positively associated with EAA at first visit (hold for all EAA indicators)
+  
+  - However, no association with rate in EAA change over follow-up was observed
 
-    - Stronger evidence that two-level ACEs was associated with increased **DunedinPACE** at the first visit in in two models
   
-    - Stronger evidence that total ACEs score was associated with increased **GrimAA** and **GrimAage** at the first visit in two models
-  
-  - Different reference group led to different results
-  
-    - We can see consistent results in the models using three-level ACEs with models using ACEs score
-    
-  - What consistent is, **no association** was seen in the rate of three EAA indicators (results shown in the ACE*time)
-  
-```{r}
-imp_list_new<-lapply(imp_list, function(data) {
-  data$ACE_TOT<-rowSums(data[,names(data)%in%ace.2], na.rm = T)
-  data$ACE_TOT_ND<-rowSums(data[,names(data)%in%ace.2[-6]], na.rm = T)
-  data<-data%>%mutate(ace_c2 = ifelse(ACE_TOT<4,0,1),
-                      ace_c3 = factor(ifelse(ACE_TOT==0,1,
-                                      ifelse(ACE_TOT<4,2,3))),
-                      ace_c2_ND = ifelse(ACE_TOT_ND<4,0,1),
-                      ace_c3_ND = factor(ifelse(ACE_TOT_ND==0,1,
-                                      ifelse(ACE_TOT<4,2,3))))
-  #res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
-  return(data)
-}
-  )
-
-```
-  
-  
-```{r}
+```{r,include=F}
 outcome_list<-c("eaa_grim","eage_grim","dunedin")
 #rm(result.matrix)
 result.matrix<-matrix(NA, nrow = 9, ncol = 5)
@@ -449,7 +390,7 @@ result.matrix<-as.data.frame(result.matrix)%>%mutate_at(vars(beta:upper), as.num
 ```
 
 
-```{r}
+```{r, include=F}
 result.matrix.1<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.1[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 
@@ -484,7 +425,7 @@ result.matrix.1<-as.data.frame(result.matrix.1)%>%mutate_at(vars(beta:upper), as
 ```
 
 
-```{r}
+```{r, echo=F}
 result.matrix$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
 
@@ -505,7 +446,7 @@ ana.plot<- ggplot(data=result.matrix,
 ana.plot
 ```
 
-```{r}
+```{r,echo=F}
 result.matrix.1$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.1$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
 
@@ -531,11 +472,9 @@ ana.plot.1
 
 #### Adjusted for cell types
 
-  - Adjusted for cell types seemed increased the power (many associations turned into statistically significant!!)
-  
-  - Probably because cell types were associated with the outcome but not the exposure (aka precision variables)
+  - Adjusting for cell types yielded a consistent result (also a bit increase in precision)
 
-```{r}
+```{r,include=F}
 glm.ace.cell<-function(data, exposure, outcome) {
   formula.cell<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + NK + B + MO + GR + CD4 + CD8 + age_change:", exposure))
   model.cell<-lme(formula.cell, 
@@ -551,7 +490,7 @@ glm.ace.cell<-function(data, exposure, outcome) {
 ```
 
 
-```{r}
+```{r,include=F}
 result.matrix.3<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.3[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 
@@ -587,7 +526,7 @@ result.matrix.3<-as.data.frame(result.matrix.3)%>%mutate_at(vars(beta:upper), as
 
 
 
-```{r}
+```{r,include=F}
 result.matrix.4<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.4[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 
@@ -623,28 +562,8 @@ result.matrix.4<-as.data.frame(result.matrix.4)%>%mutate_at(vars(beta:upper), as
 
 
 
-```{r}
-result.matrix.3$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
-result.matrix.3$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
 
-
-ana.plot.3<- ggplot(data=result.matrix.3,
-                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
-  geom_pointrange(aes(col=variable))+
-  geom_hline(yintercept =0, linetype=2)+
-  ylab("Coefficient (95% CI)")+
-  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up Adjusting for Cell Types", col = "Variables")+
-  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.1,cex=0.75) +
-  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
-
-
-ana.plot.3
-```
-
-```{r}
+```{r,echo=F}
 result.matrix.cell<-rbind(result.matrix,result.matrix.3)
 result.matrix.cell$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Cell types"))
 result.matrix.cell$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
@@ -667,7 +586,7 @@ ana.plot.cell<- ggplot(data=result.matrix.cell,
 ana.plot.cell
 ```
 
-```{r}
+```{r, echo=F}
 result.matrix.4$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.4$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 result.matrix.cell.1<-rbind(result.matrix.1,result.matrix.4)
@@ -695,7 +614,9 @@ ana.plot.cell.1
 
 #### Parental separate as the covariate
 
-```{r}
+  - Pulling out parental separation did not change the result (high consistency)
+
+```{r,include=F}
 ### Parental separate as the covariate
 glm.ace.nd<-function(data, exposure, outcome) {
   
@@ -714,7 +635,7 @@ glm.ace.nd<-function(data, exposure, outcome) {
 ```
 
 
-```{r}
+```{r,include=F}
 result.matrix.5<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.5[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 
@@ -748,7 +669,7 @@ colnames(result.matrix.5)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.5<-as.data.frame(result.matrix.5)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
-```{r}
+```{r, include=F}
 result.matrix.6<-matrix(NA, nrow = 9, ncol = 5)
 result.matrix.6[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
 
@@ -781,7 +702,7 @@ result.matrix.6[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 colnames(result.matrix.6)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.6<-as.data.frame(result.matrix.6)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
-```{r}
+```{r, echo=F}
 result.matrix.5$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.5$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -807,7 +728,7 @@ ana.plot.nd<- ggplot(data=result.matrix.nd,
 ana.plot.nd
 ```
 
-```{r}
+```{r, echo=F}
 result.matrix.6$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.6$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -835,15 +756,13 @@ ana.plot.nd.1
 
 #### Using three-level ACEs
 
-  - When changing the reference group from "<4 ACEs" to "No ACE", the association was better revealed in **GrimAA** and **GrimAge**, but not **DunedinPACE**
+  - 4+ ACEs was associated with increased EAA at the first visit compared with none
   
-    - Results were consistent with models using ACEs scores
+  - 1-3 ACEs was also associated with increased EAA in two indicators compared with none with smaller magnitude
   
-  - There is some evidence that even small number of ACEs can associated with EAA
-  
-  - Maybe consider it the primary exposure variable?
+  - Again, no association was shown for rate in EAA change
 
-```{r}
+```{r,include=F}
 result.matrix.2<-matrix(NA, nrow = 15, ncol = 5)
 result.matrix.2[,5]<-c(rep("eaa_grim",5),rep("eage_grim",5),rep("dunedin",5))
 
@@ -877,7 +796,7 @@ colnames(result.matrix.2)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.2<-as.data.frame(result.matrix.2)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
-```{r}
+```{r,echo=F}
 result.matrix.2$variable<-factor(rep(c(1, 2, 3, 4, 5),3), levels = c(1,2,3,4,5), labels = c("1-3 ACEs", "4+ ACE", "Time", "1-3 ACEs*Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.2$outcome<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -898,14 +817,14 @@ ana.plot.3c
 ```
 
 
-#### Association for each adverse experience 
+#### Assessment for ACE items
 
   - Physical abuse + Sexual Abuse + Emotional Neglect + Parental separate + Intimate partner violence + Mental illness among family members + in prison
   
-  - All above showed non-negligible effect sizes (not all of them are statistically significant)
+  - All above showed non-negligible effect sizes (though not all of them are statistically significant)
 
 
-```{r}
+```{r, include=F}
 ace_specific<-lapply(ace.2, function(x){
   result.matrix.x<-matrix(NA, nrow = 9, ncol = 5)
   result.matrix.x[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
@@ -991,7 +910,9 @@ ana.plot.specific.1
 
   - Only 774 subjects had the ancestry information
   
-  - Also seemed to improve the power (p-value decreased for ACE-EAA associations)
+  - Association decrease for GrimAA and GrimAge but slightly increase for DunedinPACE
+  
+  - Precision decrease (sample size drops)
 
 ```{r, echo=F}
 colnames(sol.ac.pc)[1]<-"ID"
@@ -1006,7 +927,7 @@ imp_list_ac<-lapply(imp_list_new, function(data){
 ```
 
 
-```{r}
+```{r,include=F}
 #### GLM
 glm.ace.ac<-function(data, exposure, outcome) {
   formula.ac<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + EV1 + EV2 + EV3 + EV4 + EV5 + age_change:", exposure))
@@ -1023,7 +944,7 @@ glm.ace.ac<-function(data, exposure, outcome) {
 ```
 
 
-```{r}
+```{r,include=F}
 ace_list<-c("ace_c2","ACE_TOT")
 
 ace_ancestry<-lapply(ace_list, function(x){
@@ -1063,7 +984,7 @@ ace_ancestry<-lapply(ace_list, function(x){
 
 ```
 
-```{r}
+```{r, echo=F}
 ace_ancestry[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 ace_ancestry[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1089,7 +1010,7 @@ ana.plot.anc<- ggplot(data=result.matrix.anc,
 ana.plot.anc
 ```
 
-```{r}
+```{r,echo=F}
 ace_ancestry[[2]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 ace_ancestry[[2]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1117,11 +1038,9 @@ ana.plot.anc.1
 
 #### Complete case analysis
 
-  - Evidence that not dealing with missing value may lead to overestimated results.
+  - There is evidence that not dealing with missing value may lead to overestimated results.
 
-
-
-```{r}
+```{r,include=F}
 sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE")]),]
 sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ace_c2=ifelse(ACE_TOT<4,0,1))
 sol.ana.long.cca<-sol.ana.long.cca%>%mutate(ma_ace_c2 = ace_c2*I(GENDER==0),
@@ -1150,7 +1069,7 @@ cca.list<-lapply(ace_list,function(x) {
 
 ```
 
-```{r}
+```{r, include=F}
 gee.ace<-function(data, exposure, outcome) {
   
   formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
@@ -1181,14 +1100,11 @@ result.matrix.gee<-as.data.frame(result.matrix.gee)%>%mutate_at(vars(beta:upper)
 
 
 res.1<-gee.ace(sol.ana.long.cca,"ace_c2","eaa_grim")
-getVarCov(res.1)
-
-res.1
 ```
 
 
 
-```{r}
+```{r, echo=F}
 cca.list[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1214,7 +1130,7 @@ ana.plot.cca<- ggplot(data=result.matrix.cca,
 ana.plot.cca
 ```
 
-```{r}
+```{r, echo=F}
 cca.list[[2]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 cca.list[[2]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1243,9 +1159,15 @@ ana.plot.cca.1
 
 ### Potential effect modification
 
-#### Stratified analysis by sex
+#### EMM by Sex
 
-```{r}
+  - Difference was observed in sex-specific estimate for EAA at first visit but not in the rate of change in EAA
+  
+  - However, confidence interval was highly overlapped, which indicates less confidence in recognizing the EMM by sex
+  
+  - P-values for interaction were also large
+
+```{r, include=F}
 imp_list_gender<-lapply(imp_list_new, function(data) {
   data<-data%>%mutate(ma_ace_c2 = ace_c2*I(GENDER==0),
                       fe_ace_c2 = ace_c2*I(GENDER==1),
@@ -1255,7 +1177,7 @@ imp_list_gender<-lapply(imp_list_new, function(data) {
 })
 ```
 
-```{r}
+```{r, include=F}
 glm.ace.sex<-function(data, exposure.1, exposure.2, outcome) {
   
   formula_1<-as.formula(paste(outcome, "~", exposure.1, "+", exposure.2, "+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure.1, "+ age_change:", exposure.2))
@@ -1288,7 +1210,7 @@ glm.ace.int<-function(data, exposure, outcome) {
 ```
 
 
-```{r}
+```{r,include=F}
 ace_indicator<-c("ma_ace_c2","fe_ace_c2","ma_ACE_TOT","fe_ACE_TOT")
 ace_position<-c(1,2)
 
@@ -1327,7 +1249,7 @@ ace_gender<-lapply(ace_position, function(x){
 })
 ```
 
-```{r}
+```{r,echo=F}
 ace_gender[[1]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 #cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1355,7 +1277,7 @@ ana.plot.gender<- ggplot(data=result.matrix.gender,
 ana.plot.gender
 ```
 
-```{r}
+```{r,echo=F}
 ace_gender[[2]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 #cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1383,7 +1305,7 @@ ana.plot.gender.1<- ggplot(data=result.matrix.gender.1,
 ana.plot.gender.1
 ```
 
-```{r}
+```{r,include=F}
 ace_list<-c("ace_c2","ACE_TOT")
 
 ace_int_gender<-lapply(ace_list, function(x){
@@ -1419,7 +1341,7 @@ ace_int_gender<-lapply(ace_list, function(x){
 })
 ```
 
-```{r}
+```{r,echo=F}
 ace_int_gender[[1]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("4+ ACEs:Gender","4+ ACEs:Gender:Time"))
 
 ace_int_gender[[2]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("ACEs score:Gender","ACEs score:Gender:Time"))
@@ -1430,9 +1352,17 @@ ace_int_gender[[2]]
 ```
 
 
-#### Stratified analysis by Borning in the US
+#### Stratified analysis by birth place
 
-```{r}
+  - Strong evidence showed that birth place modified the association
+  
+    - Those who born in the US were more susceptible to the increase in EAA at first visit associated with ACEs
+    
+    - The null results were shown for those born outside the US
+    
+  - P-value for interaction was also <0.05 (statistically significant EMM)
+
+```{r, include=F}
 imp_list_US_born<-lapply(imp_list_new, function(data) {
   data<-data%>%mutate(nusb_ace_c2 = ace_c2*I(US_BORN==0),
                       usb_ace_c2 = ace_c2*I(US_BORN==1),
@@ -1442,7 +1372,7 @@ imp_list_US_born<-lapply(imp_list_new, function(data) {
 })
 ```
 
-```{r}
+```{r, include=F}
 glm.ace.usb<-function(data, exposure.1, exposure.2, outcome) {
   
   formula_1<-as.formula(paste(outcome, "~", exposure.1, "+", exposure.2, "+ age_change + AGE + GENDER + US_BORN + fa_edu_3c + ma_edu_3c + age_change:", exposure.1, "+ age_change:", exposure.2))
@@ -1475,7 +1405,7 @@ glm.ace.int.usb<-function(data, exposure, outcome) {
 ```
 
 
-```{r}
+```{r, include=F}
 ace_indicator_1<-c("nusb_ace_c2","usb_ace_c2","nusb_ACE_TOT","usb_ACE_TOT")
 ace_position<-c(1,2)
 
@@ -1514,7 +1444,7 @@ ace_usborn<-lapply(ace_position, function(x){
 })
 ```
 
-```{r}
+```{r, echo=F}
 ace_usborn[[1]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 #cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1542,7 +1472,7 @@ ana.plot.usb<- ggplot(data=result.matrix.usb,
 ana.plot.usb
 ```
 
-```{r}
+```{r, echo=F}
 ace_usborn[[2]]$variable<-factor(rep(c(1, 1, 2, 3, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 #cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
@@ -1570,7 +1500,7 @@ ana.plot.usb.1<- ggplot(data=result.matrix.usb.1,
 ana.plot.usb.1
 ```
 
-```{r}
+```{r, include=F}
 ace_list<-c("ace_c2","ACE_TOT")
 
 ace_int_usb<-lapply(ace_list, function(x){
@@ -1606,7 +1536,7 @@ ace_int_usb<-lapply(ace_list, function(x){
 })
 ```
 
-```{r}
+```{r, echo=F}
 ace_int_usb[[1]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("4+ ACEs:US_BORN","4+ ACEs:US_BORN:Time"))
 
 ace_int_usb[[2]]$variable<-factor(rep(c(1,2),3), levels = c(1,2), labels = c("ACEs score:US_BORN","ACEs score:US_BORN:Time"))
