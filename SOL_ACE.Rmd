@@ -1,10 +1,10 @@
 ---
-title: "SOL_ACE"
+title: "ACEs and EAA"
 author: "Yinxian Chen"
 date: "`r Sys.Date()`"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -54,9 +54,9 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
   
   - For GrimAge, two indicators were used
   
-    - GrimAge acceleration (residuals)
+    - GrimAge acceleration (GrimAA) (residuals)
     
-    - GrimAge change 
+    - GrimAge itself (GrimAge)
   
   - Only focus on subjects with two Epigenetic age measures
 
@@ -71,8 +71,6 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
     - Maternal education levels (< high school, high school, > high school)
     
     - Paternal education levels (< high school, high school, > high school)
-    
-    - Interval between two visit (served as the time variable)
     
   - Variables required in the longitudinal analysis
   
@@ -218,7 +216,7 @@ sol.ana.1$age_v1<-sol.ana.1$AGE
     
     - Complete-case analysis was used as the sensitivity analysis
 
-```{r}
+```{r, echo=F}
 missing_rate<-do.call("cbind",lapply(sol.ana.1, function(x)
   rbind(sum(is.na(x)),100*sum(is.na(x)/dim(sol.ana.1)[1]))))
 colnames(missing_rate)<-names(sol.ana.1)
@@ -241,12 +239,14 @@ sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select
   
   - All covariates + outcome + additional SES variables (years in the US, current education attainment, income level, and ethnicity background) were involved in the imputation
   
-  - To improve computability, only variables have >0.1 correlation with the missing variables itself or missingness of those variables were finally included in predictions.
+  - To improve computability, only variables have > 0.1 correlation with the missing variables themselves or missingness of those variables were finally included in predictions.
+  
+  $$RE=(1+\frac{\lambda}{m})^{-1}$$
   
   - To achieve relative efficiency=0.95, five imputed datasets should be generated
   
     - Five replications + ten iterations in each dataset were set up in the imputation
-  
+    
   - The imputed plots showed that the convergence is acceptable, meaning that we can move to the next step
   
 
@@ -344,12 +344,20 @@ sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na
     
     - ACEs*Time: the difference in rate of change in EAA among those having more ACEs compared with those with less ACEs
 
-
-### Primary analysis
-
-  - Both 4+ ACEs and ACEs score is positively associated with EAA at first visit (hold for all EAA indicators)
-  
-  - However, no association with rate in EAA change over follow-up was observed
+```{r,include=F}
+glm.ace.ub<-function(data, exposure, outcome) {
+  formula.1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
+  model.1<-lme(formula.1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.cell))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  return(robust.1)
+}
+```
 
   
 ```{r,include=F}
@@ -424,8 +432,30 @@ colnames(result.matrix.1)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.1<-as.data.frame(result.matrix.1)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
+### Primary analysis
 
-```{r, echo=F}
+  - Both 4+ ACEs and ACEs score is positively associated with EAA at first visit (hold for all EAA indicators)
+  
+    - 4+ ACEs
+    
+      - GrimAA: `r round(result.matrix$beta[1],2)` (`r round(result.matrix$lower[1],2)`, `r round(result.matrix$upper[1],2)`)
+      
+      - GrimAge: `r round(result.matrix$beta[4],2)` (`r round(result.matrix$lower[4],2)`, `r round(result.matrix$upper[4],2)`)
+      
+      - DunedinPACE: `r round(result.matrix$beta[7],2)` (`r format(round(result.matrix$lower[7],2),nsmall=2)`, `r round(result.matrix$upper[7],2)`)
+      
+    - ACEs score
+    
+      - GrimAA: `r round(result.matrix.1$beta[1],2)` (`r round(result.matrix.1$lower[1],2)`, `r round(result.matrix.1$upper[1],2)`)
+      
+      - GrimAge: `r round(result.matrix.1$beta[4],2)` (`r round(result.matrix.1$lower[4],2)`, `r round(result.matrix.1$upper[4],2)`)
+      
+      - DunedinPACE: `r round(result.matrix.1$beta[7],3)` (`r format(round(result.matrix.1$lower[7],3),nsmall=3)`, `r round(result.matrix.1$upper[7],3)`) 
+  
+  - However, no association with rate in EAA change over follow-up was observed
+
+
+```{r, include=F}
 result.matrix$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
 
@@ -443,10 +473,15 @@ ana.plot<- ggplot(data=result.matrix,
         axis.ticks.x = element_blank())
 
 
-ana.plot
+
 ```
 
-```{r,echo=F}
+```{r, echo=F}
+ana.plot + theme(plot.title = element_text(size = 12))
+```
+
+
+```{r,include=F}
 result.matrix.1$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.1$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))#c(rep("GrimAA",3),rep("GrimAge",3),rep("DunedinPACE",3))
 
@@ -463,16 +498,15 @@ ana.plot.1<- ggplot(data=result.matrix.1,
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank())
 
+```
 
-ana.plot.1
+```{r, echo=F}
+ana.plot.1+ theme(plot.title = element_text(size = 12))
 ```
 
 
 ### Sensitivity analysis
 
-#### Adjusted for cell types
-
-  - Adjusting for cell types yielded a consistent result (also a bit increase in precision)
 
 ```{r,include=F}
 glm.ace.cell<-function(data, exposure, outcome) {
@@ -560,10 +594,14 @@ colnames(result.matrix.4)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.4<-as.data.frame(result.matrix.4)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
+#### Adjusted for cell types
 
-
+  - Adjusting for cell types yielded consistent results (also slightly increase in precision)
 
 ```{r,echo=F}
+result.matrix.3$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.3$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
 result.matrix.cell<-rbind(result.matrix,result.matrix.3)
 result.matrix.cell$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Cell types"))
 result.matrix.cell$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
@@ -583,12 +621,13 @@ ana.plot.cell<- ggplot(data=result.matrix.cell,
         axis.ticks.x = element_blank())
 
 
-ana.plot.cell
+ana.plot.cell+ theme(plot.title = element_text(size = 12))
 ```
 
 ```{r, echo=F}
 result.matrix.4$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("ACEs score", "Time", "ACEs score*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.4$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
 result.matrix.cell.1<-rbind(result.matrix.1,result.matrix.4)
 result.matrix.cell.1$model<-factor(c(rep(1,9),rep(2,9)), levels = c(1,2), labels = c("Model 1", "Model 1 + Cell types"))
 result.matrix.cell.1$position<-factor(c(rep(c(1,3,5),3),rep(c(2,4,6),3)))
@@ -608,13 +647,13 @@ ana.plot.cell.1<- ggplot(data=result.matrix.cell.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.cell.1
+ana.plot.cell.1+ theme(plot.title = element_text(size = 12))
 ```
 
 
 #### Parental separate as the covariate
 
-  - Pulling out parental separation did not change the result (high consistency)
+  - Pulling out parental separation showed consistent results
 
 ```{r,include=F}
 ### Parental separate as the covariate
@@ -702,6 +741,8 @@ result.matrix.6[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
 colnames(result.matrix.6)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.6<-as.data.frame(result.matrix.6)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
+
+
 ```{r, echo=F}
 result.matrix.5$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.5$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
@@ -725,7 +766,7 @@ ana.plot.nd<- ggplot(data=result.matrix.nd,
         axis.ticks.x = element_blank())
 
 
-ana.plot.nd
+ana.plot.nd+ theme(plot.title = element_text(size = 12))
 ```
 
 ```{r, echo=F}
@@ -751,16 +792,10 @@ ana.plot.nd.1<- ggplot(data=result.matrix.nd.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.nd.1
+ana.plot.nd.1+ theme(plot.title = element_text(size = 12))
 ```
 
-#### Using three-level ACEs
 
-  - 4+ ACEs was associated with increased EAA at the first visit compared with none
-  
-  - 1-3 ACEs was also associated with increased EAA in two indicators compared with none with smaller magnitude
-  
-  - Again, no association was shown for rate in EAA change
 
 ```{r,include=F}
 result.matrix.2<-matrix(NA, nrow = 15, ncol = 5)
@@ -796,6 +831,26 @@ colnames(result.matrix.2)<-c("beta","p-value","lower","upper","outcome")
 result.matrix.2<-as.data.frame(result.matrix.2)%>%mutate_at(vars(beta:upper), as.numeric)
 ```
 
+#### Using three-level ACEs
+
+  - 4+ ACEs was associated with increased EAA at the first visit compared with none
+    
+    - GrimAA: `r format(round(result.matrix.2$beta[2],2),nsmall=2)` (`r round(result.matrix.2$lower[2],2)`, `r round(result.matrix.2$upper[2],2)`)
+      
+    - GrimAge: `r round(result.matrix.2$beta[7],2)` (`r round(result.matrix.2$lower[7],2)`, `r round(result.matrix.2$upper[7],2)`)
+      
+    - DunedinPACE: `r round(result.matrix.2$beta[12],2)` (`r round(result.matrix.2$lower[12],2)`, `r round(result.matrix.2$upper[12],2)`)
+  
+  - 1-3 ACEs was also associated with increased EAA in two indicators compared with none with smaller magnitude
+    
+    - GrimAA: `r round(result.matrix.2$beta[1],2)` (`r round(result.matrix.2$lower[1],2)`, `r round(result.matrix.2$upper[1],2)`)
+      
+    - GrimAge: `r round(result.matrix.2$beta[6],2)` (`r round(result.matrix.2$lower[6],2)`, `r round(result.matrix.2$upper[6],2)`)
+      
+    - DunedinPACE: `r format(round(result.matrix.2$beta[11],3),nsmall=3)` (`r round(result.matrix.2$lower[11],3)`, `r round(result.matrix.2$upper[11],3)`) 
+  
+  - Again, no association was shown for rate in EAA change
+
 ```{r,echo=F}
 result.matrix.2$variable<-factor(rep(c(1, 2, 3, 4, 5),3), levels = c(1,2,3,4,5), labels = c("1-3 ACEs", "4+ ACE", "Time", "1-3 ACEs*Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.2$outcome<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
@@ -813,15 +868,17 @@ ana.plot.3c<- ggplot(data=result.matrix.2,
         axis.ticks.x = element_blank())
 
 
-ana.plot.3c
+ana.plot.3c+ theme(plot.title = element_text(size = 12))
 ```
 
 
 #### Assessment for ACE items
 
-  - Physical abuse + Sexual Abuse + Emotional Neglect + Parental separate + Intimate partner violence + Mental illness among family members + in prison
+  - **Physical abuse** + **Sexual Abuse** + **Emotional Neglect** + **Parental separation** + **Witness intimate partner violence** + **Substance abuse in household members** + **Mental illness in household members** + **Having household members in prison**
   
-  - All above showed non-negligible effect sizes (though not all of them are statistically significant)
+  - All above showed non-negligible effect sizes on EAA at the first visit (though not all of them were statistically significant)
+  
+  - Again, no association with rate in EAA change was observed 
 
 
 ```{r, include=F}
@@ -861,7 +918,7 @@ ace_specific<-lapply(ace.2, function(x){
 })
 ```
 
-```{r}
+```{r, echo=F}
 ace_specific_tot<-do.call("rbind", lapply(ace_specific, function(x) x))
 
 ace_specific_tot$variable<-factor(rep(c(1, 2, 3),30), levels = c(1,2,3), labels = c("ACE", "Time", "ACE*Time"))
@@ -883,18 +940,17 @@ ana.plot.specific<- ggplot(data=ace_specific_tot[ace_specific_tot$variable=="ACE
         axis.ticks.x = element_blank())
 
 
-ana.plot.specific
-
+ana.plot.specific + theme(plot.title = element_text(size = 12))
 
 ```
 
-```{r}
+```{r, echo=F}
 ana.plot.specific.1<- ggplot(data=ace_specific_tot[ace_specific_tot$variable=="ACE*Time",],
                           aes(x = type, y = beta, ymin = lower, ymax = upper))+
   geom_point(aes(col=type), size=2)+
   geom_hline(yintercept =0, linetype=2)+
   ylab("Coefficient (95% CI)")+
-  labs(title = "Association between Individual ACE Items and Rate of Change in EAA over Follow-up", col = "Individual ACE items")+
+  labs(title = "Association between Individual ACE Items and Rate of EAA Change over Follow-up", col = "Individual ACE items")+
   geom_errorbar(aes(ymin=lower, ymax=upper,col=type),width=0.2,cex=0.5) +
   facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
   theme(axis.title.x = element_blank(),
@@ -902,7 +958,7 @@ ana.plot.specific.1<- ggplot(data=ace_specific_tot[ace_specific_tot$variable=="A
         axis.ticks.x = element_blank())
 
 
-ana.plot.specific.1
+ana.plot.specific.1+ theme(plot.title = element_text(size = 11.5))
 ```
 
 
@@ -910,11 +966,11 @@ ana.plot.specific.1
 
   - Only 774 subjects had the ancestry information
   
-  - Association decrease for GrimAA and GrimAge but slightly increase for DunedinPACE
+  - Association decreased for GrimAA and GrimAge but slightly increased for DunedinPACE
   
-  - Precision decrease (sample size drops)
+  - Precision decreased (sample size dropped)
 
-```{r, echo=F}
+```{r, include=F}
 colnames(sol.ac.pc)[1]<-"ID"
 #sol.ac.pc.long<-rbind(sol.ac.pc,sol.ac.pc)
 #sol.ac.pc.long<-sol.ac.pc.long[order(sol.ac.pc.long$ID),]
@@ -1007,7 +1063,7 @@ ana.plot.anc<- ggplot(data=result.matrix.anc,
         axis.ticks.x = element_blank())
 
 
-ana.plot.anc
+ana.plot.anc+ theme(plot.title = element_text(size = 12))
 ```
 
 ```{r,echo=F}
@@ -1033,12 +1089,10 @@ ana.plot.anc.1<- ggplot(data=result.matrix.anc.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.anc.1
+ana.plot.anc.1+ theme(plot.title = element_text(size = 12))
 ```
 
-#### Complete case analysis
 
-  - There is evidence that not dealing with missing value may lead to overestimated results.
 
 ```{r,include=F}
 sol.ana.long.cca<-sol.ana.long[complete.cases(sol.ana.long[,c("ACE_TOT","fa_edu_3c","ma_edu_3c","GENDER","AGE")]),]
@@ -1069,40 +1123,26 @@ cca.list<-lapply(ace_list,function(x) {
 
 ```
 
-```{r, include=F}
-gee.ace<-function(data, exposure, outcome) {
+#### Complete case analysis
+
+  - There is evidence that not dealing with missing value may lead to overestimated results for EAA at the first visit.
   
-  formula_1<-as.formula(paste(outcome, "~", exposure,"+ age_change + AGE + GENDER + fa_edu_3c + ma_edu_3c + age_change:", exposure))
-  model.1<-gls(formula_1, 
-               data = data,
-               corr=corCompSymm(form = ~ t | ID),#t is the variable in the long format indicating the occasion of measurements (t = rep(c(1,2),sample size))
-               weights = varComb(varIdent(form = ~ 1 | t), varFixed(~WEIGHT_NORM_OVERALL_EPIGEN)),
-               method = "REML",
-               na.action = na.omit)
+    - 4+ ACEs
+    
+      - GrimAA: `r round(cca.list[[1]]$beta[1],2)` (`r round(cca.list[[1]]$lower[1],2)`, `r round(cca.list[[1]]$upper[1],2)`)
+      
+      - GrimAge: `r round(cca.list[[1]]$beta[4],2)` (`r round(cca.list[[1]]$lower[4],2)`, `r round(cca.list[[1]]$upper[4],2)`)
+      
+      - DunedinPACE: `r round(cca.list[[1]]$beta[7],2)` (`r format(round(cca.list[[1]]$lower[7],2), nsmall=2)`, `r round(cca.list[[1]]$upper[7],2)`)
+      
+    - ACEs score
+    
+      - GrimAA: `r format(round(cca.list[[2]]$beta[1],2),nsmall=2)` (`r round(cca.list[[2]]$lower[1],2)`, `r round(cca.list[[2]]$upper[1],2)`)
+      
+      - GrimAge: `r format(round(cca.list[[2]]$beta[4],2), nsmall=2)` (`r round(cca.list[[2]]$lower[4],2)`, `r round(cca.list[[2]]$upper[4],2)`)
+      
+      - DunedinPACE: `r round(cca.list[[2]]$beta[7],3)` (`r format(round(cca.list[[2]]$lower[7],3),nsmall=3)`, `r round(cca.list[[2]]$upper[7],3)`) 
   
-  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
-  return(robust.1)
-}
-
-
-result.matrix.gee<-matrix(NA, nrow = 9, ncol = 5)
-result.matrix.gee[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
-   for (i in 1:3) {
-     res.1<-gee.ace(sol.ana.long.cca,"ace_c2",outcome_list[i])
-     res.1<-res.1[c(2:3,10),]
-     result.matrix.gee[(3*i-2):(3*i),1]<-res.1$beta
-     result.matrix.gee[(3*i-2):(3*i),2]<-res.1$p_z
-     result.matrix.gee[(3*i-2):(3*i),3]<-res.1$beta - 1.96*res.1$SE
-     result.matrix.gee[(3*i-2):(3*i),4]<-res.1$beta + 1.96*res.1$SE
-   }
-colnames(result.matrix.gee)<-c("beta","p-value","lower","upper","outcome")
-result.matrix.gee<-as.data.frame(result.matrix.gee)%>%mutate_at(vars(beta:upper), as.numeric)
-
-
-res.1<-gee.ace(sol.ana.long.cca,"ace_c2","eaa_grim")
-```
-
-
 
 ```{r, echo=F}
 cca.list[[1]]$variable<-factor(rep(c(1, 2, 3),3), levels = c(1,2,3), labels = c("4+ ACEs", "Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
@@ -1127,7 +1167,7 @@ ana.plot.cca<- ggplot(data=result.matrix.cca,
         axis.ticks.x = element_blank())
 
 
-ana.plot.cca
+ana.plot.cca+ theme(plot.title = element_text(size = 12))
 ```
 
 ```{r, echo=F}
@@ -1153,7 +1193,7 @@ ana.plot.cca.1<- ggplot(data=result.matrix.cca.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.cca.1
+ana.plot.cca.1+ theme(plot.title = element_text(size = 12))
 ```
 
 
@@ -1274,7 +1314,7 @@ ana.plot.gender<- ggplot(data=result.matrix.gender,
         axis.ticks.x = element_blank())
 
 
-ana.plot.gender
+ana.plot.gender+ theme(plot.title = element_text(size = 11.5))
 ```
 
 ```{r,echo=F}
@@ -1302,7 +1342,7 @@ ana.plot.gender.1<- ggplot(data=result.matrix.gender.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.gender.1
+ana.plot.gender.1+ theme(plot.title = element_text(size = 11))
 ```
 
 ```{r,include=F}
@@ -1354,13 +1394,13 @@ ace_int_gender[[2]]
 
 #### Stratified analysis by birth place
 
-  - Strong evidence showed that birth place modified the association
+  - Strong evidence showed that birth place modified the association of ACEs and EAA at the first visit
   
     - Those who born in the US were more susceptible to the increase in EAA at first visit associated with ACEs
     
     - The null results were shown for those born outside the US
     
-  - P-value for interaction was also <0.05 (statistically significant EMM)
+  - P-values for interaction were also <0.05 (statistically significant EMM)
 
 ```{r, include=F}
 imp_list_US_born<-lapply(imp_list_new, function(data) {
@@ -1469,7 +1509,7 @@ ana.plot.usb<- ggplot(data=result.matrix.usb,
         axis.ticks.x = element_blank())
 
 
-ana.plot.usb
+ana.plot.usb+ theme(plot.title = element_text(size = 11))
 ```
 
 ```{r, echo=F}
@@ -1497,7 +1537,7 @@ ana.plot.usb.1<- ggplot(data=result.matrix.usb.1,
         axis.ticks.x = element_blank())
 
 
-ana.plot.usb.1
+ana.plot.usb.1+ theme(plot.title = element_text(size = 10.5))
 ```
 
 ```{r, include=F}
