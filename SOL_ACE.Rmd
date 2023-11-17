@@ -3,8 +3,8 @@ title: "ACEs and EAA"
 author: "Yinxian Chen"
 date: "`r Sys.Date()`"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -27,9 +27,9 @@ library(ggplot2)
 
 ```{r, include=F}
 sol.pheno<-read.csv("pheno_final_983obs_withcells.csv")
-sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_100523.csv")
-sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_100523.csv")
-sol.v1.dun<-read.csv("HCHS_DunedinPACE_Visit1_updated_100523.csv")
+sol.v1.eaa<-read.csv("HCHS_epigen_age_V1_updated_111623.csv")
+sol.v2.eaa<-read.csv("HCHS_epigen_age_V2_updated_111623.csv")
+sol.v1.dun<-read.csv("HCHS_DunedinPACE_Visit1_updated_103123.csv")
 sol.v2.dun<-read.csv("HCHS_DunedinPACE_Visit2_updated_100523.csv")
 sol.ac<-read.csv("subject_annotation_2017-05-24.csv")
 sol.ace.items<-read.csv("ACE_items.csv")
@@ -40,7 +40,7 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
 
 #### Exposure
 
-  - The primary analysis focused on binary ACEs (<4 ACEs vs. >=4 ACEs), and total ACEs score (continuous)
+  - The primary analysis focused on binary ACEs (**<4 ACEs vs. >=4 ACEs**), and **total ACEs score** (continuous)
   
   - In sensitivity analysis:
   
@@ -50,13 +50,13 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
   
 #### Outcome
 
-  - Only focused on GrimAge and DunedinPACE
+  - Only focused on **GrimAge** and **DunedinPACE**
   
   - For GrimAge, two indicators were used
   
-    - GrimAge acceleration (GrimAA) (residuals)
+    - GrimAge acceleration (**GrimAA**) (residuals)
     
-    - GrimAge itself (GrimAge)
+    - GrimAge itself (**GrimAge**)
   
   - Only focus on subjects with two Epigenetic age measures
 
@@ -74,9 +74,9 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
     
   - Variables required in the longitudinal analysis
   
-    - Interval between two visits (served as the time variable)
+    - **Interval between two visits** (served as the time variable)
     
-    - ACEs*Time (To indicate the additional change in rate of EAA by ACEs)
+    - **ACEs\*Time** (To indicate the additional change in rate of EAA by ACEs)
     
   - For sensitivity analysis:
   
@@ -88,11 +88,11 @@ correct_age<-read_xlsx("HCH035 V1 Age Corrections 30OCT23.xlsx")
     
   - Secondary analysis (for potential EMM)
   
-    - Gender (male vs. female)
+    - **Gender** (male vs. female)
     
-    - Nativity (Born in the US vs. outside the US)
+    - **Nativity** (Born in the US vs. outside the US)
     
-    - Social support (deviation from the mean ISEL score)
+    - **Social support** (deviation from the mean ISEL score)
     
       - For better interpretation, the ISEL score was centered to the mean.
     
@@ -214,9 +214,9 @@ sol.ana.1$age_v1<-sol.ana.1$AGE
 
 ### Missing data issue
 
-  - Over 10% of subjects missed the data of parental education
+  - **Over 10%** of subjects missed the data of parental education
   
-    - Unlikely to be Missing Completely at Random (MCAR) because most missing value is not due to non-response but that subjects or their parents forgot.
+    - Unlikely to be Missing Completely at Random (MCAR) because most missing value is not due to non-response but that **participants or their parents forgot**.
     
     - Therefore, it may depend on age, sex, current SES, ethnicity background...
     
@@ -247,7 +247,7 @@ sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select
 
   - Impute all missing data in our dataset (including ACE items, parental education levels, and other covariates)
   
-  - All covariates + outcome + additional SES variables (years in the US, current education attainment, income level, and ethnicity background) were involved in the imputation
+  - All covariates + additional SES variables (years in the US, current education attainment, income level, and ethnicity background) were involved in the imputation
   
   - To improve computability, only variables have > 0.1 correlation with the missing variables themselves or missingness of those variables were finally included in predictions.
   
@@ -255,13 +255,15 @@ sol.ana.imp<-sol.ana.1%>%mutate(GENDER=factor(ifelse(GENDER=="M",0,1)))%>%select
   
   - To achieve relative efficiency=0.95, five imputed datasets should be generated
   
-    - Five replications + ten iterations in each dataset were set up in the imputation
+    - Five replications + 20 iterations in each dataset were set up in the imputation
     
   - The imputed plots showed that the convergence is acceptable, meaning that we can move to the next step
   
 
 ```{r,echo=F}
-predma<-quickpred(sol.ana.imp, exclude = c("ID","WEIGHT_NORM_OVERALL_EPIGEN","age_v1","age_v2"))
+predma<-quickpred(sol.ana.imp, exclude = c("ID","WEIGHT_NORM_OVERALL_EPIGEN","age_v1","age_v2","eage_grim_v1","eage_grim_v2",
+                                           "eaa_grim_v1","eaa_grim_v2",
+                                           "dunedin_v1","dunedin_v2"))
 imp_1<-mice(sol.ana.imp, m=1, predictorMatrix = predma, print = F)
 #summary(sol.ana.long.1)
 
@@ -277,7 +279,7 @@ lambda/(RE^(-1)-1) #5
 
 set.seed(981119)
 
-imp_5<-mice(sol.ana.imp, m=5, maxit = 10, predictorMatrix = predma, method = predmethod, print = F)
+imp_5<-mice(sol.ana.imp, m=5, maxit = 20, predictorMatrix = predma, method = predmethod, print = F)
 
 plot(imp_5)
 
@@ -351,13 +353,13 @@ sol.ana.long<-sol.ana.long%>%mutate(#age_arr_US = factor(ifelse(US_BORN==0|is.na
   
   - Interpretations for the core coeffcients:
   
-    - ACEs: the difference in the first-visit EAA among those having more ACEs compared with those with less ACEs.
+    - **ACEs**: the difference in the first-visit EAA among those having more ACEs compared with those with less ACEs.
     
-    - Time: the rate of change in EAA from first to second visit among those with less ACEs (reference group) 
+    - **Time**: the rate of change in EAA from first to second visit among those with less ACEs (reference group) 
     
-    - ACEs*Time: the difference in rate of change in EAA among those having more ACEs compared with those with less ACEs
+    - **ACEs\*Time**: the difference in rate of change in EAA among those having more ACEs compared with those with less ACEs
     
-    - **Note**: If the association is observed in "ACEs" but not in "ACE*Time", that means the difference in EAA associated with ACEs is constant over time.
+    - **Note**: If the association is observed in "ACEs" but not in "ACE\*Time", that means the difference in EAA associated with ACEs is **CONSTANT** over time.
 
 ```{r,include=F}
 glm.ace.ub<-function(data, exposure, outcome) {
@@ -455,7 +457,7 @@ result.matrix.1<-as.data.frame(result.matrix.1)%>%mutate_at(vars(beta:upper), as
     
       - GrimAA: `r round(result.matrix$beta[1],2)` (`r round(result.matrix$lower[1],2)`, `r round(result.matrix$upper[1],2)`)
       
-      - GrimAge: `r round(result.matrix$beta[4],2)` (`r round(result.matrix$lower[4],2)`, `r round(result.matrix$upper[4],2)`)
+      - GrimAge: `r format(round(result.matrix$beta[4],2),nsmall=2)` (`r round(result.matrix$lower[4],2)`, `r round(result.matrix$upper[4],2)`)
       
       - DunedinPACE: `r round(result.matrix$beta[7],2)` (`r format(round(result.matrix$lower[7],2),nsmall=2)`, `r round(result.matrix$upper[7],2)`)
       
@@ -867,7 +869,7 @@ result.matrix.2<-as.data.frame(result.matrix.2)%>%mutate_at(vars(beta:upper), as
   - Again, no association was shown for rate in EAA change
 
 ```{r,echo=F}
-result.matrix.2$variable<-factor(rep(c(1, 2, 3, 4, 5),3), levels = c(1,2,3,4,5), labels = c("1-3 ACEs", "4+ ACE", "Time", "1-3 ACEs*Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+result.matrix.2$variable<-factor(rep(c(1, 2, 3, 4, 5),3), levels = c(1,2,3,4,5), labels = c("1-3 ACEs", "4+ ACEs", "Time", "1-3 ACEs*Time", "4+ ACEs*Time"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
 result.matrix.2$outcome<-factor(c(rep(1,5),rep(2,5),rep(3,5)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
 
 ana.plot.3c<- ggplot(data=result.matrix.2,
@@ -1218,7 +1220,7 @@ ana.plot.cca.1+ theme(plot.title = element_text(size = 12))
 
   - Difference was observed in gender-specific estimate for EAA at first visit but not in the rate of change in EAA
   
-  - **However**, confidence interval was **highly overlapped**, which indicates less confidence in recognizing the EMM by sex
+  - **However**, confidence interval was **highly overlapped**, which indicates less confidence in recognizing the EMM by gender
   
   - P-values for interaction were also large
 
