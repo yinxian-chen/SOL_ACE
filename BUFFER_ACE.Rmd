@@ -199,7 +199,7 @@ db_buffer_born
 bd_buffer_born_median<-aggregate(sol.ana.1[,buff_list], by = list(sol.ana.1$US_BORN), FUN = median, na.rm = T)
 bd_buffer_born_median
 
-summary(sol.ana.1$SNI_PEOPLE)
+#summary(sol.ana.1$SNI_PEOPLE)
 sol.ana.1$ID[which(sol.ana.1$SNI_PEOPLE==10043)]
 sol.ana.1$SNI_PEOPLE[sol.ana.1$ID==45474355]<-NA
 
@@ -234,7 +234,7 @@ set.seed(981119)
 
 imp_5<-mice(sol.ana.imp, m=5, maxit = 20, predictorMatrix = predma, method = predmethod, print = F)
 
-plot(imp_5)
+#plot(imp_5)
 
 imp_list<-datlist_create(imp_5)
 ```
@@ -251,7 +251,7 @@ imp_list_new<-lapply(imp_list, function(data) {
                       ace_c3 = factor(ifelse(ACE_TOT==0,1,
                                       ifelse(ACE_TOT<4,2,3))))%>%
     mutate_at(vars(ISEL_ALL,FAM_OB,FAM_SUPT,FAM_REF,SNI_ROLE,SNI_PEOPLE,SNI_EMBD,SEE_EI), function(x)
-      x-mean(x))
+      (x-mean(x))/sd(x))
                       #ISEL_C = ISEL_all-mean(ISEL_all))
   #res.1<-glm.ace.ub(data,"ace_c2","eaa_grim")
   data<-reshape(data = data,
@@ -411,6 +411,10 @@ ace_int_sp[[2]][,c(1:2,5:6)]
 
 #### Three way interaction
 
+  - Social support buffered ACEs on EAA among both US-born and non-US-born
+  
+  - The EMM is more pronounced among US-born
+
 ```{r}
 imp_list_US_born<-lapply(imp_list_new, function(data) {
   data<-data%>%mutate(nusb_ace_c2 = ace_c2*I(US_BORN==0),
@@ -550,6 +554,10 @@ ace_int_sp_ub[[2]][c(3:6,9:12),c(1:2,5:7)]
 
 #### EMM by Familism
 
+  - Family support does not modify the EAA at the same visit but mildly in the rate of EAA over time measured by DunedinPACE
+  
+  - Family obligation and family as referent seem modify the EAA at the same visit measured by GrimAge
+  
 ```{r}
 #Familism subscale
 fam_list<-c("FAM_OB", "FAM_SUPT", "FAM_REF")
@@ -795,7 +803,9 @@ ace_int_fam[[3]][[1]][,c(1:2,5:6)]
 ace_int_fam[[3]][[2]][,c(1:2,5:6)]
 ```
 
-#### Three level interaction with familism 
+#### Three level interaction with familism
+
+  - Overall, non-US-born is benfited more from Familism compared with US-born
 
 ```{r, include=F}
 glm.ace.int.fa.ub<-function(data, exposure.1, exposure.2 ,outcome, fam) {
@@ -1037,3 +1047,270 @@ ana.plot.fa.ub.5<- ggplot(data=result.matrix.fa.ub.5,
 ana.plot.fa.ub.5+ theme(plot.title = element_text(size = 9.5))
 
 ```
+
+```{r}
+ace_int_fa_ub[[1]][[1]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_fa_ub[[1]][[2]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_fa_ub[[2]][[1]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_fa_ub[[2]][[2]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_fa_ub[[3]][[1]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_fa_ub[[3]][[2]][c(3:6,9:12),c(1:2,5:7)]
+```
+
+### Ethnicity identity
+
+  - Little evidence for EI that can modify the association between ACE and EAA at the same visit
+  
+  - EI modified the association between ACE and EAA rate over time measured by DunedinPACE
+
+```{r, include=F}
+glm.ace.int.ei<-function(data, exposure, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure, "+ age_change + AGE + GENDER + SEE_EI + fa_edu_3c + ma_edu_3c + SEE_EI:", exposure, "+ age_change:", exposure, "+ age_change:SEE_EI:", exposure))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+```
+
+
+```{r, include=F}
+ace_int_ei<-lapply(ace_list, function(x){
+  result.matrix.x<-matrix(NA, nrow = 6, ncol = 5)
+  #result.matrix.x[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+  for (i in 1:2) {
+    pa<-lapply(imp_list_new, function(data){
+    res<-glm.ace.int.ei(data,x, outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(2,11,13)]
+    names(beta)<-c("ACE","ACE:SEE_EI","ACE:Time:SEE_EI")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(2,11,13)]
+    names(se)<-c("ACE","ACE:SEE_EI","ACE:Time:SEE_EI")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(3*i-2):(3*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(3*i-2):(3*i),2]<-summary(pool.re)[["p"]]
+  result.matrix.x[(3*i-2):(3*i),3]<-summary(pool.re)[["(lower"]]
+  result.matrix.x[(3*i-2):(3*i),4]<-summary(pool.re)[["upper)"]]
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
+  result.matrix.x[,5]<-factor(c(rep(1,3),rep(2,3)), levels = c(1,2), labels = c("GrimAA","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+
+```{r, echo=F}
+ace_int_ei[[1]]$variable<-factor(rep(c(1, 2, 3),2), levels = c(1,2,3), labels = c("4+ ACEs", "4+ ACEs*Ethnicity identity", "4+ ACEs*Time*Ethnicity identity"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.ei<-ace_int_ei[[1]]
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+#result.matrix.sp$ISEL<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+#result.matrix.usb$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.ei<- ggplot(data=result.matrix.ei,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between 4+ ACEs and EAA over Average Six-year Follow-up Modified by Ethnicity Identity", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.ei+ theme(plot.title = element_text(size = 10))
+```
+
+```{r, echo=F}
+ace_int_ei[[2]]$variable<-factor(rep(c(1, 2, 3),2), levels = c(1,2,3), labels = c("ACEs score", "ACEs score*Ethnicity identity", "ACEs score*Time*Ethnicity identity"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+
+result.matrix.ei.1<-ace_int_ei[[2]]
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+#result.matrix.sp$ISEL<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+#result.matrix.usb$position<-factor(c(rep(c(1,2,3,4),3)))
+
+
+
+ana.plot.ei.1<- ggplot(data=result.matrix.ei.1,
+                          aes(x = variable, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up Modified by Ethnicity Identity", col = "Variables")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.ei.1+ theme(plot.title = element_text(size = 9.5))
+
+```
+
+
+```{r, echo=F}
+ace_int_ei[[1]][,c(1:2,5:6)]
+ace_int_ei[[2]][,c(1:2,5:6)]
+
+```
+
+
+#### Three-level interaction
+
+  - EI buffer ACE on increasing EAA over time among US-born measured by DunedinPACE
+  
+```{r, include=F}
+glm.ace.int.ei.ub<-function(data, exposure.1, exposure.2, outcome) {
+  
+  formula_1<-as.formula(paste(outcome, "~", exposure.1, "+", exposure.2, "+ age_change + AGE + GENDER + US_BORN + SEE_EI + fa_edu_3c + ma_edu_3c + SEE_EI:", exposure.1, "+ SEE_EI:", exposure.2, "+ age_change:", exposure.1, "+ age_change:", exposure.2, "+ age_change:SEE_EI:", exposure.1, "+ age_change:SEE_EI:", exposure.2))
+  model.1<-lme(formula_1, 
+               data = data,
+               random = ~1+age_change|ID,
+               weights = varFixed(~WEIGHT_NORM_OVERALL_EPIGEN),
+               method = "REML",
+               na.action = na.omit)
+  #print(summary(model.1))
+  robust.1<-coef_test(model.1, vcov = "CR0", test = "z")
+  
+  return(robust.1)
+}
+```
+
+
+```{r, include=F}
+ace_indicator_1<-c("nusb_ace_c2","usb_ace_c2","nusb_ACE_TOT","usb_ACE_TOT")
+ace_position<-c(1,2)
+
+ace_int_ei_ub<-lapply(ace_position, function(x){
+  result.matrix.x<-matrix(NA, nrow = 12, ncol = 5)
+  #result.matrix.x[,5]<-c(rep("eaa_grim",3),rep("eage_grim",3),rep("dunedin",3))
+  for (i in 1:2) {
+    pa<-lapply(imp_list_US_born, function(data){
+    res<-glm.ace.int.ei.ub(data,ace_indicator_1[2*x-1], ace_indicator_1[2*x], outcome_list[i])
+    return(res)
+  })
+
+  qhat<-lapply(pa, function(re){
+    beta<-re$beta[c(2:3,13:14,17:18)]
+    names(beta)<-c("ACE (non-US-born)","ACE (US-born)", "ACE:EI (non-US-born)","ACE:EI (US-born)", "ACE:EI:Time (non-US-born)","ACE:EI:Time (US-born)")
+    return(beta)
+  })
+
+  se<-lapply(pa, function(re){
+    se<-re$SE[c(2:3,13:14,17:18)]
+    names(se)<-c("ACE (non-US-born)","ACE (US-born)", "ACE:EI (non-US-born)","ACE:EI (US-born)", "ACE:EI:Time (non-US-born)","ACE:EI:Time (US-born)")
+    return(se)
+  })
+
+  pool.re <- pool_mi( qhat=qhat, se=se )
+
+  result.matrix.x[(6*i-5):(6*i),1]<-summary(pool.re)[["results"]]
+  result.matrix.x[(6*i-5):(6*i),2]<-summary(pool.re)[["p"]]
+  result.matrix.x[(6*i-5):(6*i),3]<-summary(pool.re)[["(lower"]]
+  result.matrix.x[(6*i-5):(6*i),4]<-summary(pool.re)[["upper)"]]
+  }
+  colnames(result.matrix.x)<-c("beta","p-value","lower","upper","outcome")
+  result.matrix.x<-as.data.frame(result.matrix.x)%>%mutate_at(vars(beta:upper), as.numeric)
+  result.matrix.x[,5]<-factor(c(rep(1,6),rep(2,6)), levels = c(1,2), labels = c("GrimAA","DunedinPACE"))
+  return(result.matrix.x)
+})
+```
+
+
+```{r, echo=F}
+ace_int_ei_ub[[1]]$variable<-factor(rep(c(1,1, 2,2, 3,3),2), levels = c(1,2,3), labels = c("4+ ACEs", "4+ ACEs*Ethnicity identity", "4+ ACEs*Time*Ethnicity identity"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+ace_int_ei_ub[[1]]$US_BORN<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+result.matrix.ei.ub<-ace_int_ei_ub[[1]]
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+#result.matrix.sp$ISEL<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+#result.matrix.usb$position<-factor(c(rep(c(1,2,3,4),3)))
+
+result.matrix.ei.ub$position<-factor(c(rep(c(1,2,3,4,5,6),2)))
+
+
+ana.plot.ei.ub<- ggplot(data=result.matrix.ei.ub,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape = US_BORN), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Nativity-Specific Association between 4+ ACEs and EAA over Average Six-year Follow-up Modified by Ethnicity Identity", col = "Variables",
+       shape = "Nativity status")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.ei.ub+ theme(plot.title = element_text(size = 10))
+```
+
+```{r, echo=F}
+ace_int_ei_ub[[2]]$variable<-factor(rep(c(1,1, 2,2, 3,3),2), levels = c(1,2,3), labels = c("ACEs score", "ACEs score*Ethnicity identity", "ACEs score*Time*Ethnicity identity"))#rep(c("4+ ACEs", "Time", "4+ ACEs*Time"),3)
+#cca.list[[1]]$outcome<-factor(c(rep(1,3),rep(2,3),rep(3,3)), levels = c(1,2,3), labels = c("GrimAA","GrimAge","DunedinPACE"))
+ace_int_ei_ub[[2]]$US_BORN<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+result.matrix.ei.ub.1<-ace_int_ei_ub[[2]]
+
+#result.matrix.cca<-rbind(result.matrix,cca.list[[1]])
+#result.matrix.sp$ISEL<-factor(rep(c(1,2),6), levels = c(1,2), labels = c("Non-US-born", "US-born"))
+#result.matrix.usb$position<-factor(c(rep(c(1,2,3,4),3)))
+
+result.matrix.ei.ub.1$position<-factor(c(rep(c(1,2,3,4,5,6),2)))
+
+
+ana.plot.ei.ub.1<- ggplot(data=result.matrix.ei.ub.1,
+                          aes(x = position, y = beta, ymin = lower, ymax = upper))+
+  geom_point(aes(col=variable, shape=US_BORN), size = 2)+
+  geom_hline(yintercept =0, linetype=2)+
+  ylab("Coefficient (95% CI)")+
+  labs(title = "Association between ACEs Score and EAA over Average Six-year Follow-up Modified by Ethnicity Identity", col = "Variables",
+       shape="Nativity status")+
+  geom_errorbar(aes(ymin=lower, ymax=upper,col=variable),width=0.2,cex=0.5) +
+  facet_wrap(~outcome,strip.position="left",nrow=3,scales = "free_y")+theme_bw()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+ana.plot.ei.ub.1+ theme(plot.title = element_text(size = 9.5))
+
+```
+
+
+```{r, echo=F}
+ace_int_ei_ub[[1]][c(3:6,9:12),c(1:2,5:7)]
+ace_int_ei_ub[[2]][c(3:6,9:12),c(1:2,5:7)]
+
+```
+
+
