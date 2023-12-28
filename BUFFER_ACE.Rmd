@@ -133,7 +133,7 @@ sol.phe.eaa<-merge(sol.phe.eaa,smoke_total, by = "ID",all.x=T)
 
 ## Create a working dataset
 cov_list<-c("ID","AGE","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS","EDUCATION_C2","INCOME_C3","BKGRD1_C7","NK_1","NK_2","B_1","B_2","MO_1","MO_2",
-            "GR_1","GR_2","CD4_1","CD4_2","CD8_1","CD8_2","WEIGHT_NORM_OVERALL_EPIGEN","CIGARETTE_USE","CIGARETTE_USE_V2")
+            "GR_1","GR_2","CD4_1","CD4_2","CD8_1","CD8_2","WEIGHT_NORM_OVERALL_EPIGEN","CIGARETTE_USE","CIGARETTE_USE_V2","SEEA10")
 
 
 #cov_list_short<-c("ID","AGE","GENDER","PIEA22A","PIEA22B","PIEA23A","PIEA23B","US_BORN","YRSUS")
