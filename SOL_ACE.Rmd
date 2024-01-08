@@ -27,6 +27,7 @@ library(readxl)
 library(ggplot2)
 library(haven)
 library(gtsummary)
+library(corrplot)
 ```
 
 ```{r, eval=F, include=F}
@@ -223,6 +224,21 @@ sol.ana.1<-sol.ana.1%>%select(-c(PIEA22B,PIEA23B,PIEA22A,PIEA23A))%>%mutate(ma_e
 sol.ana.1$age_v1<-sol.ana.1$AGE
 
 ```
+
+
+### Correlation between each individual item of ACE
+
+```{r}
+M<-cor(sol.ana.1[,names(sol.ana.1)%in%ace.2], use = "pairwise.complete.obs",method = "spearman")
+rownames(M)<-c("Emotional abuse","Physical abuse","Sexual abuse","Emotional neglect", "Physical neglect", "Parental separation/divorce", "Witnessed intimate partner violence", "Household substance abuse", "Household mental illness", "Incarcerated household members")
+colnames(M)<-rownames(M)
+corrplot(M,method = "square",type = "lower", diag = F, tl.cex = 0.6, tl.col = "Black", tl.srt = 45, addCoef.col = "Black", number.cex = 0.6)
+
+
+```
+
+
+
 
 ### Missing data issue
 
